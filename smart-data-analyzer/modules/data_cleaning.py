@@ -1,4 +1,8 @@
+import re
+from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
+import numpy as np
 
 
 def remove_missing(df: pd.DataFrame, axis: int = 0, how: str = "any") -> pd.DataFrame:
@@ -63,21 +67,18 @@ def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.D
     if column not in result.columns:
         return result
 
-    try:
-        if target_type == "int":
-            result[column] = pd.to_numeric(result[column], errors="coerce").astype("Int64")
-        elif target_type == "float":
-            result[column] = pd.to_numeric(result[column], errors="coerce")
-        elif target_type == "str":
-            result[column] = result[column].astype(str)
-        elif target_type == "datetime":
-            result[column] = pd.to_datetime(result[column], errors="coerce")
-        elif target_type == "category":
-            result[column] = result[column].astype("category")
-        else:
-            raise ValueError(f"Unsupported target type: {target_type}")
-    except Exception:
-        raise
+    if target_type == "int":
+        result[column] = pd.to_numeric(result[column], errors="coerce").astype("Int64")
+    elif target_type == "float":
+        result[column] = pd.to_numeric(result[column], errors="coerce")
+    elif target_type == "str":
+        result[column] = result[column].astype(str)
+    elif target_type == "datetime":
+        result[column] = pd.to_datetime(result[column], errors="coerce")
+    elif target_type == "category":
+        result[column] = result[column].astype("category")
+    else:
+        raise ValueError(f"Unsupported target type: {target_type}")
 
     return result
 
@@ -119,3 +120,162 @@ def sort_dataframe(df: pd.DataFrame, column: str, ascending: bool = True) -> pd.
     if column not in df.columns:
         return df
     return df.sort_values(by=column, ascending=ascending).copy()
+
+
+def standardize_categories(df: pd.DataFrame, column: str, mapping: Optional[Dict[str, str]] = None) -> pd.DataFrame:
+    """Normalize category values in a column using a mapping or casing rules."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    series = result[column].astype(str)
+
+    if mapping:
+        result[column] = series.replace(mapping)
+    else:
+        # Default standardization: strip + lower + title
+        result[column] = series.str.strip().str.lower().str.title()
+
+    return result
+
+
+def replace_values(
+    df: pd.DataFrame,
+    replacements: Dict[Any, Any],
+    columns: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """Replace values in the dataframe using a mapping dictionary."""
+    result = df.copy()
+    if columns:
+        for col in columns:
+            if col in result.columns:
+                result[col] = result[col].replace(replacements)
+    else:
+        result = result.replace(replacements)
+    return result
+
+
+def log_transform(df: pd.DataFrame, column: str, new_column: Optional[str] = None) -> pd.DataFrame:
+    """Apply log transformation to a numeric column."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    new_column = new_column or f"{column}_log"
+    result[new_column] = np.log1p(result[column].astype(float).replace({np.nan: None}))
+    return result
+
+
+def normalize_column(df: pd.DataFrame, column: str, method: str = "minmax") -> pd.DataFrame:
+    """Normalize a numeric column using min-max or z-score scaling."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    series = pd.to_numeric(result[column], errors="coerce")
+    if method == "minmax":
+        min_val = series.min()
+        max_val = series.max()
+        result[column] = (series - min_val) / (max_val - min_val)
+    elif method == "zscore":
+        result[column] = (series - series.mean()) / series.std(ddof=0)
+    else:
+        raise ValueError(f"Unsupported normalization method: {method}")
+
+    return result
+
+
+def standardize_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Standardize a numeric column to zero mean and unit variance."""
+    return normalize_column(df, column, method="zscore")
+
+
+def clean_string_column(
+    df: pd.DataFrame,
+    column: str,
+    trim: bool = True,
+    remove_special: bool = True,
+    case: Optional[str] = None,
+) -> pd.DataFrame:
+    """Clean string column values with trimming, case normalization, and special character removal."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    series = result[column].astype(str)
+    if trim:
+        series = series.str.strip()
+    if remove_special:
+        series = series.str.replace(r"[^\w\s]", "", regex=True)
+    if case == "lower":
+        series = series.str.lower()
+    elif case == "upper":
+        series = series.str.upper()
+    elif case == "title":
+        series = series.str.title()
+
+    result[column] = series
+    return result
+
+
+def parse_dates(df: pd.DataFrame, column: str, format: Optional[str] = None) -> pd.DataFrame:
+    """Parse a column to datetime."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    result[column] = pd.to_datetime(result[column], format=format, errors="coerce")
+    return result
+
+
+def extract_date_parts(
+    df: pd.DataFrame,
+    column: str,
+    parts: Optional[List[str]] = None,
+    prefix: Optional[str] = None,
+) -> pd.DataFrame:
+    """Extract year/month/day parts from a datetime column."""
+    result = df.copy()
+    if column not in result.columns:
+        return result
+
+    if parts is None:
+        parts = ["year", "month", "day"]
+
+    col_dt = pd.to_datetime(result[column], errors="coerce")
+    prefix = prefix or column
+    for part in parts:
+        if part == "year":
+            result[f"{prefix}_year"] = col_dt.dt.year
+        elif part == "month":
+            result[f"{prefix}_month"] = col_dt.dt.month
+        elif part == "day":
+            result[f"{prefix}_day"] = col_dt.dt.day
+        elif part == "weekday":
+            result[f"{prefix}_weekday"] = col_dt.dt.weekday
+
+    return result
+
+
+def remove_outliers_zscore(df: pd.DataFrame, column: str, threshold: float = 3.0) -> pd.DataFrame:
+    """Remove rows that are outliers based on z-score."""
+    if column not in df.columns:
+        return df
+
+    series = pd.to_numeric(df[column], errors="coerce")
+    z = np.abs((series - series.mean()) / series.std(ddof=0))
+    return df.loc[z <= threshold].copy()
+
+
+def remove_outliers_iqr(df: pd.DataFrame, column: str, multiplier: float = 1.5) -> pd.DataFrame:
+    """Remove rows that are outliers based on the IQR method."""
+    if column not in df.columns:
+        return df
+
+    series = pd.to_numeric(df[column], errors="coerce")
+    q1 = series.quantile(0.25)
+    q3 = series.quantile(0.75)
+    iqr = q3 - q1
+    lower = q1 - multiplier * iqr
+    upper = q3 + multiplier * iqr
+    return df[(series >= lower) & (series <= upper)].copy()
