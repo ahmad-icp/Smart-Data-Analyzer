@@ -1,0 +1,10 @@
+import base64
+from pathlib import Path
+
+logo_b64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABQElEQVRYR+2X0Q2DIBCGd7j0AkmB3gBt6ANq0FusgXkA1kA6+YCZWFpgvISTeUeGUdGbcMFiNJitoZxgbyqc5bR1smYhZuIAp6QHYAn4AVQF+gIUHQP7IzsQuQxWCsx0nUTLJ1ZOo30u9hAdQoQnPAevOgAqc0Kv6hDMHmYd57Mu0qwBVpKYBuq2a6E3GzeYEdIo9pBxk7UKE7h1NVks2QuKXqj7l81U6pkCOqAPoTGYwrEMyIIPuKkI0U5rTtofU3KrI9yuY51A/am4Dqxs+YE4iZipTcG1qUgDrgtJVyO7ywhz9X0dMJSStj15hkuG3uI3xbFhG2u3vg7x5sq3Xa0zE2WeYdklHSeRA3bi8C5oDGqQHcOEbRSnXxGrwLEtTxpmYfKgNvQBsZV6e8drnF9ozPmA5pZT3GA1oeWV6RrS0wv41SP7IZVwAAAABJRU5ErkJggg=="
+)
+
+path = Path("assets") / "logo.png"
+path.write_bytes(base64.b64decode(logo_b64))
+print(f"Wrote {path} ({path.stat().st_size} bytes)")
