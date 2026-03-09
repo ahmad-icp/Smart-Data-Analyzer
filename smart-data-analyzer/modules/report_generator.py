@@ -29,7 +29,13 @@ def generate_markdown_report(
     md.append("## Dataset Overview\n")
     md.append(_format_dict(overview))
     md.append("\n## Top Rows\n")
-    md.append(df.head(10).to_markdown(index=False))
+    try:
+        md.append(df.head(10).to_markdown(index=False))
+    except Exception:
+        # pandas.to_markdown requires optional dependency tabulate
+        md.append("```")
+        md.append(df.head(10).to_string(index=False))
+        md.append("```")
 
     if not stats.empty:
         md.append("\n## Descriptive Statistics\n")

@@ -272,10 +272,10 @@ def data_preview_tab():
 
     st.subheader("Schema")
     schema = pd.DataFrame({"dtype": df.dtypes.astype(str), "missing": df.isna().sum()})
-    st.dataframe(schema, use_container_width=True)
+    st.dataframe(schema, width="stretch")
 
     st.subheader("Preview")
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(df.head(10), width="stretch")
 
 
 def ai_suggestions_tab():
@@ -322,7 +322,7 @@ def data_cleaning_tab():
         return
 
     st.subheader("Current dataset snapshot")
-    st.dataframe(st.session_state.df.head(5), use_container_width=True)
+    st.dataframe(st.session_state.df.head(5), width="stretch")
 
     if st.button("Reset dataset to original"):
         st.session_state.df = st.session_state.original_df.copy()
@@ -345,23 +345,22 @@ def profiling_tab():
     st.subheader("Missing Value Heatmap")
     heatmap = missing_heatmap(df)
     if heatmap is not None:
-        st.plotly_chart(heatmap, use_container_width=True)
+        st.plotly_chart(heatmap, width="stretch")
 
     st.subheader("Correlation Heatmap")
     corr_fig = correlation_heatmap(df)
     if corr_fig is not None:
-        st.plotly_chart(corr_fig, use_container_width=True)
+        st.plotly_chart(corr_fig, width="stretch")
 
     st.subheader("Column Statistics")
     stats = column_statistics(df)
     if not stats.empty:
-        st.dataframe(stats, use_container_width=True)
+        st.dataframe(stats, width="stretch")
 
     st.subheader("Numeric Distributions")
     dist_plots = numeric_distribution_plots(df)
     for name, fig in dist_plots.items():
-        st.plotly_chart(fig, use_container_width=True)
-
+            st.plotly_chart(fig, width="stretch")
 
 def visualization_tab():
     st.header("Visualization")
@@ -397,7 +396,7 @@ def visualization_tab():
         try:
             fig = create_plot(df, chart_type, x_col, y_col)
             st.session_state.last_plot = fig
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.error(f"Could not create chart: {e}")
 
@@ -455,7 +454,7 @@ def dashboard_tab():
     else:
         for idx, entry in enumerate(st.session_state.dashboard_charts, start=1):
             st.subheader(f"Chart {idx}: {entry.get('type')}")
-            st.plotly_chart(entry.get("figure"), use_container_width=True)
+            st.plotly_chart(entry.get("figure"), width="stretch")
             if st.button(f"Remove chart {idx}"):
                 st.session_state.dashboard_charts.pop(idx - 1)
                 st.experimental_rerun()
@@ -471,15 +470,15 @@ def statistics_tab():
 
     st.subheader("Descriptive Statistics")
     desc = descriptive_statistics(df)
-    st.dataframe(desc, use_container_width=True)
+    st.dataframe(desc, width="stretch")
 
     st.subheader("Correlation & Covariance")
     corr = df.select_dtypes(include=["number"]).corr()
     cov = covariance_matrix(df)
     st.write("Correlation")
-    st.dataframe(corr, use_container_width=True)
+    st.dataframe(corr, width="stretch")
     st.write("Covariance")
-    st.dataframe(cov, use_container_width=True)
+    st.dataframe(cov, width="stretch")
 
     st.subheader("Regression")
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
