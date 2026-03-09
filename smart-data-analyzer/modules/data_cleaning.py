@@ -1,8 +1,8 @@
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def remove_missing(df: pd.DataFrame, axis: int = 0, how: str = "any") -> pd.DataFrame:

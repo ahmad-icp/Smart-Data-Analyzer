@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 
@@ -586,7 +589,15 @@ def export_tab():
 
 def main():
     init_state()
-    st.sidebar.image("assets/logo.png", use_column_width=True)
+
+    # Use path relative to the app file for assets (works regardless of working directory)
+    app_dir = Path(__file__).resolve().parent
+    logo_path = app_dir / "assets" / "logo.png"
+    if logo_path.exists():
+        st.sidebar.image(str(logo_path), width=220)
+    else:
+        st.sidebar.write("**Smart Data Analyzer Pro**")
+
     st.title("Smart Data Analyzer Pro")
 
     sidebar_upload()
