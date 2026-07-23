@@ -14,7 +14,11 @@ def dataset_overview(df: pd.DataFrame) -> dict:
         "missing_values": int(df.isna().sum().sum()),
         "duplicate_rows": int(df.duplicated().sum()),
         "numeric_columns": len(df.select_dtypes(include=["number"]).columns),
-        "categorical_columns": len(df.select_dtypes(include=["object", "category"]).columns),
+        "categorical_columns": sum(
+            pd.api.types.is_string_dtype(df[column])
+            or isinstance(df[column].dtype, pd.CategoricalDtype)
+            for column in df.columns
+        ),
     }
     return overview
 

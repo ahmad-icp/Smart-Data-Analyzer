@@ -65,7 +65,13 @@ def analyze_dataset(df: pd.DataFrame) -> List[Dict[str, Any]]:
         )
 
     # Inconsistent categories
-    for col in df.select_dtypes(include=["object", "category"]).columns:
+    categorical_columns = [
+        column
+        for column in df.columns
+        if pd.api.types.is_string_dtype(df[column])
+        or isinstance(df[column].dtype, pd.CategoricalDtype)
+    ]
+    for col in categorical_columns:
         vals = df[col].dropna().astype(str)
         if vals.empty:
             continue
@@ -92,7 +98,7 @@ def analyze_dataset(df: pd.DataFrame) -> List[Dict[str, Any]]:
 
     # Incorrect data types
     for col in df.columns:
-        if df[col].dtype == object:
+        if pd.api.types.is_string_dtype(df[col]):
             success, total = _try_parse_numeric(df[col])
             if total >= 5 and success / total >= 0.8:
                 suggestions.append(

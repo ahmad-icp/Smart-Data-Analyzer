@@ -6,10 +6,17 @@ import pandas as pd
 
 from modules.ai_cleaning import analyze_dataset, apply_suggestion
 from modules.advanced_statistics import (
+    bootstrap_mean_interval,
     chi_square_test,
+    independent_t_test,
+    kruskal_wallis_test,
+    levene_test,
     mann_whitney_test,
     normality_test,
+    one_sample_t_test,
     one_way_anova,
+    paired_t_test,
+    wilcoxon_test,
 )
 from modules.ai_export_writer import generate_cleaning_plan, generate_data_card
 from modules.automl import run_automl, split_dataset
@@ -56,10 +63,14 @@ from modules.report_generator import (
     build_chart_image_base64,
 )
 from modules.statistics_tools import (
+    confidence_interval_mean,
+    correlation_matrix,
+    correlation_test,
     covariance_matrix,
     descriptive_statistics,
+    frequency_table,
     linear_regression,
-    t_test_independent,
+    multiple_linear_regression,
 )
 from modules.visualization import create_plot, suggest_chart_types
 
@@ -70,6 +81,152 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def apply_modern_theme():
+    """Apply a clean responsive visual system without external assets."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --sda-primary: #635bff;
+            --sda-primary-dark: #4f46e5;
+            --sda-accent: #06b6d4;
+            --sda-surface: rgba(255,255,255,.82);
+            --sda-border: rgba(99,91,255,.16);
+        }
+        .stApp {
+            background:
+                radial-gradient(circle at 8% 0%, rgba(99,91,255,.12), transparent 28rem),
+                radial-gradient(circle at 92% 8%, rgba(6,182,212,.10), transparent 24rem),
+                #f7f8fc;
+        }
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #111827 0%, #1e1b4b 100%);
+            border-right: 1px solid rgba(255,255,255,.08);
+        }
+        [data-testid="stSidebar"] * { color: #f8fafc; }
+        [data-testid="stSidebar"] .stButton button {
+            background: rgba(255,255,255,.09);
+            border: 1px solid rgba(255,255,255,.16);
+            color: #fff;
+        }
+        [data-testid="stSidebar"] .stButton button:hover {
+            background: rgba(99,91,255,.45);
+            border-color: rgba(255,255,255,.34);
+        }
+        .block-container {
+            max-width: 1480px;
+            padding-top: 1.6rem;
+            padding-bottom: 3rem;
+        }
+        h1, h2, h3 { letter-spacing: -.025em; }
+        h1 {
+            background: linear-gradient(90deg, #312e81, #635bff 48%, #0891b2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800 !important;
+        }
+        div[data-testid="stMetric"] {
+            background: var(--sda-surface);
+            border: 1px solid var(--sda-border);
+            border-radius: 16px;
+            padding: 1rem 1.1rem;
+            box-shadow: 0 8px 30px rgba(15,23,42,.055);
+        }
+        div[data-testid="stMetricLabel"] { color: #64748b; }
+        div[data-testid="stMetricValue"] { color: #0f172a; }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: .35rem;
+            padding: .35rem;
+            background: rgba(255,255,255,.72);
+            border: 1px solid var(--sda-border);
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(15,23,42,.04);
+        }
+        .stTabs [data-baseweb="tab"] {
+            border-radius: 10px;
+            padding: .65rem 1rem;
+            height: auto;
+        }
+        .stTabs [aria-selected="true"] {
+            background: linear-gradient(135deg, var(--sda-primary), var(--sda-primary-dark));
+            color: white !important;
+        }
+        .stButton button, .stDownloadButton button {
+            border-radius: 10px;
+            min-height: 2.6rem;
+            font-weight: 650;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .stButton button:hover, .stDownloadButton button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(99,91,255,.16);
+        }
+        [data-testid="stFileUploaderDropzone"] {
+            border: 1.5px dashed rgba(99,91,255,.48);
+            border-radius: 14px;
+            background: rgba(99,91,255,.045);
+        }
+        [data-testid="stDataFrame"] {
+            border: 1px solid var(--sda-border);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 8px 30px rgba(15,23,42,.04);
+        }
+        div[data-testid="stExpander"] {
+            border: 1px solid var(--sda-border);
+            border-radius: 12px;
+            background: rgba(255,255,255,.62);
+        }
+        .sda-hero {
+            padding: 1.15rem 1.3rem;
+            margin: -.3rem 0 1.2rem;
+            border: 1px solid var(--sda-border);
+            border-radius: 18px;
+            background: linear-gradient(120deg, rgba(99,91,255,.10), rgba(6,182,212,.08));
+            color: #334155;
+        }
+        .sda-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: .75rem;
+            margin: 1rem 0 1.5rem;
+        }
+        .sda-card {
+            padding: 1rem;
+            border: 1px solid var(--sda-border);
+            border-radius: 14px;
+            background: rgba(255,255,255,.72);
+            color: #334155;
+        }
+        .sda-card strong { display:block; color:#1e1b4b; margin-bottom:.25rem; }
+        @media (max-width: 700px) {
+            .block-container { padding: 1rem .75rem 2rem; }
+            .stTabs [data-baseweb="tab"] { padding: .5rem .65rem; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_welcome():
+    st.markdown(
+        """
+        <div class="sda-hero">
+          Upload a dataset from the sidebar to begin. Every operation is previewable,
+          reversible, and designed to keep raw data private.
+        </div>
+        <div class="sda-grid">
+          <div class="sda-card"><strong>Understand</strong>Profile quality, schema and distributions.</div>
+          <div class="sda-card"><strong>Clean safely</strong>Use guided tools or approved natural-language plans.</div>
+          <div class="sda-card"><strong>Analyze deeply</strong>Basic, inferential, robust and regression statistics.</div>
+          <div class="sda-card"><strong>Model & publish</strong>Build baselines and export reproducible packages.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def init_state():
@@ -171,7 +328,8 @@ def refresh_suggestions():
 
 
 def sidebar_upload():
-    st.sidebar.title("Upload Dataset")
+    st.sidebar.title("Data workspace")
+    st.sidebar.caption("Import locally. Your data stays in this session.")
     uploaded_file = st.sidebar.file_uploader(
         "Upload CSV, Excel, JSON, TSV or Parquet",
         type=["csv", "tsv", "xlsx", "xls", "json", "jsonl", "parquet"],
@@ -199,7 +357,10 @@ def sidebar_upload():
                 st.success(f"Loaded {len(df)} rows and {len(df.columns)} columns.")
 
     if st.session_state.df is not None:
-        if st.sidebar.button("Reset to original"):
+        dataset_metrics = st.sidebar.columns(2)
+        dataset_metrics[0].metric("Rows", f"{len(st.session_state.df):,}")
+        dataset_metrics[1].metric("Columns", len(st.session_state.df.columns))
+        if st.sidebar.button("Reset to original", width="stretch"):
             st.session_state.df = st.session_state.original_df.copy()
             st.session_state.undo_stack = []
             st.session_state.transformation_history = []
@@ -210,7 +371,9 @@ def sidebar_upload():
             refresh_suggestions()
             st.sidebar.success("Reset to original dataset.")
         if st.sidebar.button(
-            "Undo last change", disabled=not st.session_state.undo_stack
+            "Undo last change",
+            disabled=not st.session_state.undo_stack,
+            width="stretch",
         ):
             if undo_last_change():
                 st.sidebar.success("Last transformation was undone.")
@@ -332,7 +495,7 @@ def sidebar_cleaning_tools():
         filter_col = st.selectbox("Filter column", [None] + cols, key="filter_column")
         if filter_col:
             unique_vals = st.session_state.df[filter_col].dropna().unique().tolist()
-            if st.session_state.df[filter_col].dtype.name in ["int64", "float64"]:
+            if pd.api.types.is_numeric_dtype(st.session_state.df[filter_col]):
                 min_val = float(st.session_state.df[filter_col].min())
                 max_val = float(st.session_state.df[filter_col].max())
                 lo, hi = st.slider(
@@ -695,114 +858,354 @@ def dashboard_tab():
 
 
 def statistics_tab():
-    st.header("Statistics")
+    st.header("Statistical Analysis Lab")
     if st.session_state.df is None:
         st.info("Upload a dataset to run statistical analysis.")
         return
 
     df = st.session_state.df
-
-    st.subheader("Descriptive Statistics")
-    desc = descriptive_statistics(df)
-    st.dataframe(desc, width="stretch")
-
-    st.subheader("Correlation & Covariance")
-    corr = df.select_dtypes(include=["number"]).corr()
-    cov = covariance_matrix(df)
-    st.write("Correlation")
-    st.dataframe(corr, width="stretch")
-    st.write("Covariance")
-    st.dataframe(cov, width="stretch")
-
-    st.subheader("Regression")
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    if len(numeric_cols) >= 2:
-        reg_x = st.selectbox("Regression X (predictor)", [None] + numeric_cols)
-        reg_y = st.selectbox("Regression Y (target)", [None] + numeric_cols)
-        if reg_x and reg_y and st.button("Run linear regression"):
-            result = linear_regression(df, reg_x, reg_y)
-            st.write("**Linear regression results**")
-            st.json(result)
-    else:
-        st.info("Need at least 2 numeric columns for regression.")
-
-    st.subheader("Hypothesis testing")
-    numeric_test_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    tcol1 = st.selectbox("Sample 1 column", [None] + numeric_test_cols, key="t1")
-    tcol2 = st.selectbox("Sample 2 column", [None] + numeric_test_cols, key="t2")
-    if tcol1 and tcol2:
-        alpha = st.number_input(
-            "Significance level (alpha)", min_value=0.001, max_value=0.2, value=0.05, step=0.01
-        )
-        if st.button("Run t-test"):
-            try:
-                res = t_test_independent(df, tcol1, tcol2)
-                st.write(res)
-                st.write(
-                    "✅ Reject null hypothesis"
-                    if res["p_value"] < alpha
-                    else "✅ Fail to reject null hypothesis"
-                )
-            except Exception as e:
-                st.error(f"T-test error: {e}")
-
-    st.subheader("Advanced statistical tests")
-    advanced_test = st.selectbox(
-        "Test",
-        ["Normality", "Mann-Whitney U", "One-way ANOVA", "Chi-square independence"],
-        key="advanced_test",
-    )
     categorical_cols = [
         column
         for column in df.columns
         if not pd.api.types.is_numeric_dtype(df[column])
         or df[column].nunique(dropna=True) <= 20
     ]
-    try:
-        if advanced_test == "Normality":
-            value_col = st.selectbox(
-                "Numeric column", [None] + numeric_cols, key="normality_value"
+    alpha = st.number_input(
+        "Decision threshold (alpha)",
+        min_value=0.001,
+        max_value=0.2,
+        value=0.05,
+        step=0.01,
+        key="statistics_alpha",
+        help="A p-value below alpha is commonly treated as evidence against the null hypothesis.",
+    )
+
+    overview_tab, relationship_tab, tests_tab, robust_tab, regression_tab = st.tabs(
+        [
+            "Overview",
+            "Relationships",
+            "Group tests",
+            "Distribution & robust",
+            "Regression",
+        ]
+    )
+
+    with overview_tab:
+        st.subheader("Comprehensive numeric summary")
+        description = descriptive_statistics(df)
+        if description.empty:
+            st.info("No numeric columns are available.")
+        else:
+            st.dataframe(
+                description.style.format(precision=4, na_rep="—"),
+                width="stretch",
             )
-            if value_col and st.button("Run normality test", key="run_normality"):
-                st.json(normality_test(df[value_col]))
-        elif advanced_test in {"Mann-Whitney U", "One-way ANOVA"}:
-            value_col = st.selectbox(
-                "Numeric outcome", [None] + numeric_cols, key="group_test_value"
+            st.download_button(
+                "Download descriptive statistics",
+                statistics_to_csv(description),
+                "descriptive_statistics.csv",
+                "text/csv",
+                key="download_descriptive_statistics",
             )
-            group_col = st.selectbox(
-                "Group column", [None] + categorical_cols, key="group_test_group"
-            )
-            if (
-                value_col
-                and group_col
-                and st.button("Run group comparison", key="run_group_test")
-            ):
-                result = (
-                    mann_whitney_test(df, value_col, group_col)
-                    if advanced_test == "Mann-Whitney U"
-                    else one_way_anova(df, value_col, group_col)
+
+        st.subheader("Frequency and proportion table")
+        frequency_column = st.selectbox(
+            "Column",
+            [None] + df.columns.tolist(),
+            key="frequency_column",
+        )
+        if frequency_column:
+            frequency = frequency_table(df, frequency_column)
+            st.dataframe(frequency, width="stretch", hide_index=True)
+
+        st.subheader("Mean confidence interval")
+        ci_col, ci_level_col = st.columns(2)
+        ci_column = ci_col.selectbox(
+            "Numeric column", [None] + numeric_cols, key="ci_column"
+        )
+        confidence = ci_level_col.select_slider(
+            "Confidence level",
+            options=[0.80, 0.90, 0.95, 0.99],
+            value=0.95,
+            key="ci_confidence",
+        )
+        if ci_column and st.button("Calculate confidence interval", key="run_ci"):
+            try:
+                st.json(confidence_interval_mean(df[ci_column], confidence))
+            except Exception as exc:
+                st.error(f"Confidence interval error: {exc}")
+
+    with relationship_tab:
+        method = st.radio(
+            "Correlation method",
+            ["Pearson", "Spearman", "Kendall"],
+            index=0,
+            horizontal=True,
+            key="correlation_method",
+        )
+        resolved_method = (method or "Pearson").lower()
+        correlation = correlation_matrix(df, resolved_method)
+        covariance = covariance_matrix(df)
+        left, right = st.columns(2)
+        with left:
+            st.write("**Correlation matrix**")
+            if correlation.empty:
+                st.info("No numeric columns are available.")
+            else:
+                st.dataframe(
+                    correlation.style.background_gradient(
+                        cmap="RdBu", vmin=-1, vmax=1
+                    ).format(precision=3),
+                    width="stretch",
+                )
+        with right:
+            st.write("**Covariance matrix**")
+            if not covariance.empty:
+                st.dataframe(covariance.style.format(precision=3), width="stretch")
+
+        st.subheader("Pairwise significance test")
+        pair_left, pair_right = st.columns(2)
+        first_numeric = pair_left.selectbox(
+            "First numeric column", [None] + numeric_cols, key="corr_first"
+        )
+        second_numeric = pair_right.selectbox(
+            "Second numeric column", [None] + numeric_cols, key="corr_second"
+        )
+        if (
+            first_numeric
+            and second_numeric
+            and first_numeric != second_numeric
+            and st.button("Test correlation", key="run_correlation")
+        ):
+            try:
+                result = correlation_test(
+                    df, first_numeric, second_numeric, resolved_method
                 )
                 st.json(result)
-        else:
-            first = st.selectbox(
-                "First categorical column",
-                [None] + categorical_cols,
-                key="chi_first",
-            )
-            second = st.selectbox(
-                "Second categorical column",
-                [None] + categorical_cols,
-                key="chi_second",
-            )
-            if (
-                first
-                and second
-                and first != second
-                and st.button("Run chi-square test", key="run_chi")
-            ):
-                st.json(chi_square_test(df, first, second))
-    except Exception as exc:
-        st.error(f"Statistical test error: {exc}")
+                st.info(
+                    "Statistically significant at the selected alpha."
+                    if result["p_value"] < alpha
+                    else "Not statistically significant at the selected alpha."
+                )
+            except Exception as exc:
+                st.error(f"Correlation test error: {exc}")
+
+    with tests_tab:
+        test_name = st.selectbox(
+            "Group comparison",
+            [
+                "Independent t-test (two groups)",
+                "Paired t-test (two columns)",
+                "One-sample t-test",
+                "One-way ANOVA",
+                "Mann-Whitney U",
+                "Kruskal-Wallis",
+                "Wilcoxon signed-rank",
+                "Chi-square independence",
+            ],
+            key="group_test_name",
+        )
+        try:
+            result = None
+            if test_name in {
+                "Independent t-test (two groups)",
+                "One-way ANOVA",
+                "Mann-Whitney U",
+                "Kruskal-Wallis",
+            }:
+                input_left, input_right = st.columns(2)
+                outcome = input_left.selectbox(
+                    "Numeric outcome", [None] + numeric_cols, key="group_outcome"
+                )
+                grouping = input_right.selectbox(
+                    "Group column", [None] + categorical_cols, key="group_column"
+                )
+                if outcome and grouping and st.button(
+                    "Run group comparison", key="run_group_comparison"
+                ):
+                    runners = {
+                        "Independent t-test (two groups)": independent_t_test,
+                        "One-way ANOVA": one_way_anova,
+                        "Mann-Whitney U": mann_whitney_test,
+                        "Kruskal-Wallis": kruskal_wallis_test,
+                    }
+                    result = runners[test_name](df, outcome, grouping)
+            elif test_name in {
+                "Paired t-test (two columns)",
+                "Wilcoxon signed-rank",
+            }:
+                input_left, input_right = st.columns(2)
+                first = input_left.selectbox(
+                    "First measurement", [None] + numeric_cols, key="paired_first"
+                )
+                second = input_right.selectbox(
+                    "Second measurement", [None] + numeric_cols, key="paired_second"
+                )
+                if first and second and first != second and st.button(
+                    "Run paired comparison", key="run_paired_comparison"
+                ):
+                    result = (
+                        paired_t_test(df, first, second)
+                        if test_name.startswith("Paired")
+                        else wilcoxon_test(df, first, second)
+                    )
+            elif test_name == "One-sample t-test":
+                input_left, input_right = st.columns(2)
+                sample_column = input_left.selectbox(
+                    "Numeric sample", [None] + numeric_cols, key="one_sample_column"
+                )
+                hypothesized_mean = input_right.number_input(
+                    "Hypothesized mean", value=0.0, key="hypothesized_mean"
+                )
+                if sample_column and st.button(
+                    "Run one-sample test", key="run_one_sample"
+                ):
+                    result = one_sample_t_test(
+                        df[sample_column], hypothesized_mean
+                    )
+            else:
+                input_left, input_right = st.columns(2)
+                first = input_left.selectbox(
+                    "First categorical column",
+                    [None] + categorical_cols,
+                    key="chi_first",
+                )
+                second = input_right.selectbox(
+                    "Second categorical column",
+                    [None] + categorical_cols,
+                    key="chi_second",
+                )
+                if first and second and first != second and st.button(
+                    "Run chi-square test", key="run_chi"
+                ):
+                    result = chi_square_test(df, first, second)
+
+            if result:
+                st.json(result)
+                if "p_value" in result:
+                    st.info(
+                        "Reject the null hypothesis at the selected alpha."
+                        if result["p_value"] < alpha
+                        else "Insufficient evidence to reject the null hypothesis."
+                    )
+        except Exception as exc:
+            st.error(f"Statistical test error: {exc}")
+
+    with robust_tab:
+        diagnostics = st.selectbox(
+            "Diagnostic or robust procedure",
+            [
+                "Shapiro-Wilk normality",
+                "D'Agostino K² normality",
+                "Anderson-Darling normality",
+                "Levene/Brown-Forsythe equal variance",
+                "Bootstrap mean interval",
+            ],
+            key="diagnostic_test",
+        )
+        try:
+            if diagnostics.startswith(("Shapiro", "D'Agostino", "Anderson")):
+                column = st.selectbox(
+                    "Numeric column",
+                    [None] + numeric_cols,
+                    key="normality_column",
+                )
+                if column and st.button("Run normality check", key="run_normality"):
+                    normality_method = {
+                        "Shapiro-Wilk normality": "shapiro",
+                        "D'Agostino K² normality": "dagostino",
+                        "Anderson-Darling normality": "anderson",
+                    }[diagnostics]
+                    st.json(normality_test(df[column], normality_method))
+            elif diagnostics.startswith("Levene"):
+                input_left, input_right = st.columns(2)
+                outcome = input_left.selectbox(
+                    "Numeric outcome", [None] + numeric_cols, key="levene_outcome"
+                )
+                grouping = input_right.selectbox(
+                    "Group column", [None] + categorical_cols, key="levene_group"
+                )
+                if outcome and grouping and st.button(
+                    "Test equal variance", key="run_levene"
+                ):
+                    st.json(levene_test(df, outcome, grouping))
+            else:
+                input_left, input_right = st.columns(2)
+                column = input_left.selectbox(
+                    "Numeric column", [None] + numeric_cols, key="bootstrap_column"
+                )
+                confidence = input_right.select_slider(
+                    "Confidence level",
+                    options=[0.80, 0.90, 0.95, 0.99],
+                    value=0.95,
+                    key="bootstrap_confidence",
+                )
+                if column and st.button(
+                    "Run reproducible bootstrap", key="run_bootstrap"
+                ):
+                    st.json(
+                        bootstrap_mean_interval(
+                            df[column], confidence=confidence
+                        )
+                    )
+        except Exception as exc:
+            st.error(f"Diagnostic error: {exc}")
+
+    with regression_tab:
+        regression_type = st.radio(
+            "Regression type",
+            ["Simple linear", "Multiple OLS with inference"],
+            horizontal=True,
+            key="regression_type",
+        )
+        try:
+            if regression_type == "Simple linear":
+                input_left, input_right = st.columns(2)
+                predictor = input_left.selectbox(
+                    "Predictor", [None] + numeric_cols, key="simple_reg_x"
+                )
+                target = input_right.selectbox(
+                    "Target", [None] + numeric_cols, key="simple_reg_y"
+                )
+                if predictor and target and predictor != target and st.button(
+                    "Run simple regression", key="run_simple_regression"
+                ):
+                    st.json(linear_regression(df, predictor, target))
+            else:
+                target = st.selectbox(
+                    "Target", [None] + numeric_cols, key="multiple_reg_target"
+                )
+                predictors = st.multiselect(
+                    "Numeric predictors",
+                    [column for column in numeric_cols if column != target],
+                    key="multiple_reg_predictors",
+                )
+                if target and predictors and st.button(
+                    "Run multiple OLS", key="run_multiple_regression"
+                ):
+                    result = multiple_linear_regression(df, predictors, target)
+                    metrics = result["metrics"]
+                    metric_columns = st.columns(4)
+                    metric_columns[0].metric("R²", f"{metrics['r2']:.4f}")
+                    metric_columns[1].metric(
+                        "Adjusted R²", f"{metrics['adjusted_r2']:.4f}"
+                    )
+                    metric_columns[2].metric("AIC", f"{metrics['aic']:.2f}")
+                    metric_columns[3].metric("BIC", f"{metrics['bic']:.2f}")
+                    st.write("**Coefficients and inference**")
+                    st.dataframe(
+                        result["coefficients"].style.format(precision=5),
+                        width="stretch",
+                    )
+                    with st.expander("Model diagnostics"):
+                        st.json(metrics)
+                        st.dataframe(
+                            result["predictions"].head(100),
+                            width="stretch",
+                        )
+        except Exception as exc:
+            st.error(f"Regression error: {exc}")
 
 
 def report_generator_tab():
@@ -1148,6 +1551,7 @@ def export_tab():
 
 def main():
     init_state()
+    apply_modern_theme()
 
     # Use path relative to the app file for assets (works regardless of working directory)
     app_dir = Path(__file__).resolve().parent
@@ -1158,12 +1562,27 @@ def main():
         st.sidebar.write("**Smart Data Analyzer Pro**")
 
     st.title("Smart Data Analyzer Pro")
+    st.markdown(
+        '<div class="sda-hero"><strong>From raw data to defensible insight.</strong> '
+        "Clean, visualize, test, model and publish from one privacy-aware workspace.</div>",
+        unsafe_allow_html=True,
+    )
 
     sidebar_upload()
     sidebar_cleaning_tools()
 
+    if st.session_state.df is None:
+        render_welcome()
+
     tabs = st.tabs(
-        ["Understand", "Clean", "Visualize", "Analyze", "AutoML", "Publish"]
+        [
+            "🔎 Understand",
+            "✨ Clean",
+            "📈 Visualize",
+            "🧪 Analyze",
+            "🤖 AutoML",
+            "🚀 Publish",
+        ]
     )
 
     with tabs[0]:
@@ -1193,7 +1612,7 @@ def main():
 
     with tabs[3]:
         statistics_workspace, readiness_workspace = st.tabs(
-            ["Statistics", "ML Readiness"]
+            ["Statistical Lab", "ML Readiness"]
         )
         with statistics_workspace:
             statistics_tab()

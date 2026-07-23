@@ -12,8 +12,13 @@ writing code.
 - Converts natural-language requests into allow-listed cleaning plans with
   before/after preview and explicit approval.
 - Builds filtered interactive Plotly dashboards.
-- Runs descriptive statistics, regression, normality, Mann-Whitney U, ANOVA,
-  chi-square, and effect-size analysis.
+- Runs comprehensive descriptive statistics, frequency/proportion tables, confidence
+  intervals, Pearson/Spearman/Kendall correlation, covariance, and outlier analysis.
+- Provides one-sample, independent and paired t-tests; Mann-Whitney U, Wilcoxon,
+  ANOVA, Kruskal-Wallis, chi-square, effect sizes, and variance diagnostics.
+- Includes Shapiro-Wilk, D'Agostino K² and Anderson-Darling normality checks,
+  reproducible bootstrap intervals, and multiple OLS regression with coefficient
+  inference and residual diagnostics.
 - Produces an explainable ML-readiness score, data dictionary, potential leakage
   warnings, and sensitive-column checks.
 - Creates reproducible train/validation/test splits.
@@ -33,12 +38,13 @@ providers.
 
 ## Workspace
 
-The interface is organized into six focused areas:
+The responsive interface is organized into six focused areas:
 
 1. **Understand** — preview and profile the dataset.
 2. **Clean** — smart suggestions, natural-language plans, and history.
 3. **Visualize** — charts and interactive dashboards.
-4. **Analyze** — statistics, privacy/leakage checks, and ML readiness.
+4. **Analyze** — basic, inferential, robust and regression statistics plus
+   privacy/leakage checks and ML readiness.
 5. **AutoML** — reproducible splitting, model comparison, and downloads.
 6. **Publish** — reports and the complete AI-assisted export package.
 
@@ -56,6 +62,10 @@ Activate the environment and install dependencies:
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+The dependency file includes the engines required for every advertised format,
+including legacy `.xls`, `.xlsx`, Parquet, chart PNG, PDF, and statistical-model
+exports. No separate browser installation is required for chart rendering.
 
 ## Optional AI writers
 
