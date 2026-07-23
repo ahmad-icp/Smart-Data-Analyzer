@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 
 from .ml_readiness import build_data_dictionary
+from .natural_language_cleaning import ALLOWED_ACTIONS, parse_ai_plan
 
 
 def _secret(name: str) -> Optional[str]:
@@ -218,3 +219,59 @@ def generate_data_card(
 
     warning = "; ".join(errors) if errors else None
     return template_data_card(df, quality, title), "Built-in professional writer", warning
+
+
+def generate_cleaning_plan(
+    instruction: str,
+    columns: list,
+    dtypes: Dict[str, str],
+    provider: str = "auto",
+):
+    """Translate an instruction into a validated, allow-listed cleaning plan."""
+    prompt = (
+        "Translate the user's data-cleaning request into a JSON list only. "
+        "Each item must be {\"action\": string, \"params\": object}. "
+        f"Allowed actions: {sorted(ALLOWED_ACTIONS)}. "
+        f"Available columns and dtypes: {dtypes}. "
+        "Never create code, expressions, file operations, network operations, or SQL. "
+        "Use exact column names. Return [] if the request cannot be represented safely.\n"
+        f"USER REQUEST: {instruction}"
+    )
+    requested = provider.lower()
+    attempts = []
+    if requested in ("auto", "ollama"):
+        attempts.append(
+            (
+                "Ollama / Qwen",
+                lambda: _ollama(prompt, _secret("OLLAMA_MODEL") or "qwen3:4b"),
+            )
+        )
+    if requested in ("auto", "gemini") and _secret("GEMINI_API_KEY"):
+        attempts.append(
+            (
+                "Gemini",
+                lambda: _gemini(
+                    prompt, _secret("GEMINI_MODEL") or "gemini-3-flash-preview"
+                ),
+            )
+        )
+    if requested in ("auto", "groq") and _secret("GROQ_API_KEY"):
+        attempts.append(
+            (
+                "Groq",
+                lambda: _groq(
+                    prompt, _secret("GROQ_MODEL") or "llama-3.3-70b-versatile"
+                ),
+            )
+        )
+
+    errors = []
+    for name, writer in attempts:
+        try:
+            plan = parse_ai_plan(writer(), columns)
+            if plan:
+                return plan, name, None
+            errors.append(f"{name} could not map the request to safe actions")
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+    return [], None, "; ".join(errors) or "No configured AI provider was available."
