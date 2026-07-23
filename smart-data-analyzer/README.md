@@ -1,119 +1,107 @@
-# Smart Data Analyzer
+# Smart Data Analyzer Pro
 
-**Smart Data Analyzer** is a Streamlit web application designed as a simpler but more powerful alternative to Excel. It enables beginners, students, researchers, and analysts to upload CSV/Excel datasets, clean and preprocess data, generate interactive visualizations, perform statistical analysis, and export results—without writing code.
+Smart Data Analyzer Pro is a privacy-aware Streamlit workspace for understanding,
+cleaning, profiling, visualizing, assessing, and publishing tabular datasets without
+writing code.
 
----
+## What it does
 
-## ✅ Key Features
+- Imports CSV, TSV, Excel, JSON/JSONL, and Parquet data.
+- Profiles schema, missingness, duplicates, distributions, and correlations.
+- Applies explainable cleaning operations with undo and transformation history.
+- Converts natural-language requests into allow-listed cleaning plans with
+  before/after preview and explicit approval.
+- Builds filtered interactive Plotly dashboards.
+- Runs descriptive statistics, regression, normality, Mann-Whitney U, ANOVA,
+  chi-square, and effect-size analysis.
+- Produces an explainable ML-readiness score, data dictionary, potential leakage
+  warnings, and sensitive-column checks.
+- Creates reproducible train/validation/test splits.
+- Compares classification or regression baselines, evaluates the winner on held-out
+  data, explains feature importance, and exports the trained pipeline.
+- Generates polished dataset documentation with local Qwen/Ollama, Gemini, Groq, or
+  a deterministic professional fallback.
+- Exports a complete ZIP containing original and cleaned data, optional ML splits and
+  model, README, quality report, data dictionary, history, and a reproducibility
+  script.
 
-- **Upload CSV & Excel** files
-- **Data preview** with schema, missing values, and quick insights
-- **Cleaning tools**: remove missing values, fill missing, remove duplicates, drop/rename columns, type conversion, filtering, sorting
-- **Interactive visualizations**: histograms, bar charts, line charts, scatter plots, box plots, correlation heatmaps, distribution plots
-- **Statistical analysis**: descriptive stats, correlation/covariance matrices, linear regression, outlier detection (Z-score & IQR), hypothesis testing
-- **Export** cleaned datasets, charts (PNG), and summaries
-- **Smart insights**: auto-detect numeric columns, data quality indicators, suggested charts
+AI never executes generated code or edits the DataFrame directly. Natural-language
+requests become a restricted JSON plan, are validated against known columns and safe
+operations, and require user approval. Documentation writers receive schema and
+aggregate quality metrics; raw records and example values are not sent to cloud
+providers.
 
----
+## Workspace
 
-## 🧰 Technologies Used
+The interface is organized into six focused areas:
 
-- Python
-- Streamlit
-- Pandas / NumPy
-- Plotly
-- SciPy
-- scikit-learn
-- Matplotlib / Seaborn
-- Openpyxl
+1. **Understand** — preview and profile the dataset.
+2. **Clean** — smart suggestions, natural-language plans, and history.
+3. **Visualize** — charts and interactive dashboards.
+4. **Analyze** — statistics, privacy/leakage checks, and ML readiness.
+5. **AutoML** — reproducible splitting, model comparison, and downloads.
+6. **Publish** — reports and the complete AI-assisted export package.
 
----
-
-## 🚀 Getting Started (Local)
-
-### 1) Clone the repository
+## Run locally
 
 ```bash
-git clone https://github.com/<your-username>/Smart-Data-Analyzer.git
+git clone https://github.com/ahmad-icp/Smart-Data-Analyzer.git
 cd Smart-Data-Analyzer/smart-data-analyzer
+python -m venv .venv
 ```
 
-### 2) Create and activate a virtual environment
-
-On macOS/Linux:
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-On Windows (PowerShell):
-```powershell
-python -m venv venv
-venv\Scripts\Activate.ps1
-```
-
-### 3) Install dependencies
+Activate the environment and install dependencies:
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 4) Run the app
-
-```bash
 streamlit run app.py
 ```
 
-Then open the URL shown in your browser (usually http://localhost:8501).
+## Optional AI writers
 
----
+No AI setup is required: the built-in writer always produces a complete data card.
+For richer natural-language output, configure one or more providers.
 
-## 📦 Project Structure
+### Local and private: Ollama + Qwen
 
-```
-smart-data-analyzer/
-├── app.py
-├── requirements.txt
-├── README.md
-├── .gitignore
-├── modules/
-│   ├── data_loader.py
-│   ├── data_cleaning.py
-│   ├── visualization.py
-│   ├── statistics_tools.py
-│   └── export_tools.py
-├── assets/
-│   └── logo.png
-└── sample_data/
-    └── example_dataset.csv
+```bash
+ollama pull qwen3:4b
+ollama serve
 ```
 
----
+Optional environment variables:
 
-## ☁️ Deploy to Streamlit Community Cloud
+```text
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen3:4b
+```
 
-1. Create a GitHub repository and push this project.
-2. Go to [Streamlit Community Cloud](https://share.streamlit.io/).
-3. Click **New app** → connect your GitHub account.
-4. Select your repository and the correct branch (`main`).
-5. Set the **Main file path** to `app.py`.
-6. Click **Deploy**.
+### Gemini or Groq fallback
 
----
+```text
+GEMINI_API_KEY=your_key
+GEMINI_MODEL=gemini-3-flash-preview
 
-## 🧩 Tips
+GROQ_API_KEY=your_key
+GROQ_MODEL=llama-3.3-70b-versatile
+```
 
-- Use the **Data Preview** tab to understand your data structure quickly.
-- Use the **Cleaning Tools** sidebar to iteratively clean the dataset.
-- Try different chart types in **Visualization** to surface trends.
-- Export cleaned datasets when you're ready to share results.
+Never commit API keys. Configure them in the deployment platform's secret manager.
 
----
+## Tests
 
-## 🛠️ Customization
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
 
-You can extend the app by adding more cleaning or analysis features in `modules/` and expose them via the Streamlit UI.
+## Streamlit Community Cloud
 
----
+Choose this repository and set the main file path to:
 
-Enjoy exploring your data! 🎉
+```text
+smart-data-analyzer/app.py
+```
+
+Ollama is intended for local or self-hosted deployment. On Community Cloud, use the
+built-in writer or configure a cloud provider key securely.

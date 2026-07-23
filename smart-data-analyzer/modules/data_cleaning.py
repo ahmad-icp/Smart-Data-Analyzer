@@ -128,7 +128,8 @@ def standardize_categories(df: pd.DataFrame, column: str, mapping: Optional[Dict
     if column not in result.columns:
         return result
 
-    series = result[column].astype(str)
+    original_missing = result[column].isna()
+    series = result[column].astype("string")
 
     if mapping:
         result[column] = series.replace(mapping)
@@ -136,6 +137,7 @@ def standardize_categories(df: pd.DataFrame, column: str, mapping: Optional[Dict
         # Default standardization: strip + lower + title
         result[column] = series.str.strip().str.lower().str.title()
 
+    result[column] = result[column].mask(original_missing, pd.NA)
     return result
 
 
@@ -162,7 +164,8 @@ def log_transform(df: pd.DataFrame, column: str, new_column: Optional[str] = Non
         return result
 
     new_column = new_column or f"{column}_log"
-    result[new_column] = np.log1p(result[column].astype(float).replace({np.nan: None}))
+    series = pd.to_numeric(result[column], errors="coerce")
+    result[new_column] = np.where(series >= -1, np.log1p(series), np.nan)
     return result
 
 
@@ -176,9 +179,11 @@ def normalize_column(df: pd.DataFrame, column: str, method: str = "minmax") -> p
     if method == "minmax":
         min_val = series.min()
         max_val = series.max()
-        result[column] = (series - min_val) / (max_val - min_val)
+        denominator = max_val - min_val
+        result[column] = 0.0 if denominator == 0 else (series - min_val) / denominator
     elif method == "zscore":
-        result[column] = (series - series.mean()) / series.std(ddof=0)
+        std = series.std(ddof=0)
+        result[column] = 0.0 if std == 0 else (series - series.mean()) / std
     else:
         raise ValueError(f"Unsupported normalization method: {method}")
 
@@ -202,7 +207,8 @@ def clean_string_column(
     if column not in result.columns:
         return result
 
-    series = result[column].astype(str)
+    original_missing = result[column].isna()
+    series = result[column].astype("string")
     if trim:
         series = series.str.strip()
     if remove_special:
@@ -214,7 +220,7 @@ def clean_string_column(
     elif case == "title":
         series = series.str.title()
 
-    result[column] = series
+    result[column] = series.mask(original_missing, pd.NA)
     return result
 
 
@@ -263,8 +269,11 @@ def remove_outliers_zscore(df: pd.DataFrame, column: str, threshold: float = 3.0
         return df
 
     series = pd.to_numeric(df[column], errors="coerce")
-    z = np.abs((series - series.mean()) / series.std(ddof=0))
-    return df.loc[z <= threshold].copy()
+    std = series.std(ddof=0)
+    if pd.isna(std) or std == 0:
+        return df.copy()
+    z = np.abs((series - series.mean()) / std)
+    return df.loc[series.isna() | (z <= threshold)].copy()
 
 
 def remove_outliers_iqr(df: pd.DataFrame, column: str, multiplier: float = 1.5) -> pd.DataFrame:
@@ -276,6 +285,8 @@ def remove_outliers_iqr(df: pd.DataFrame, column: str, multiplier: float = 1.5) 
     q1 = series.quantile(0.25)
     q3 = series.quantile(0.75)
     iqr = q3 - q1
+    if pd.isna(iqr) or iqr == 0:
+        return df.copy()
     lower = q1 - multiplier * iqr
     upper = q3 + multiplier * iqr
-    return df[(series >= lower) & (series <= upper)].copy()
+    return df[series.isna() | ((series >= lower) & (series <= upper))].copy()
