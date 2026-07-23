@@ -4,7 +4,14 @@ import zipfile
 import numpy as np
 import pandas as pd
 
+from modules.advanced_statistics import (
+    chi_square_test,
+    mann_whitney_test,
+    normality_test,
+    one_way_anova,
+)
 from modules.ai_export_writer import generate_data_card
+from modules.automl import run_automl, split_dataset
 from modules.data_cleaning import (
     clean_string_column,
     normalize_column,
@@ -13,7 +20,13 @@ from modules.data_cleaning import (
     standardize_categories,
 )
 from modules.export_tools import build_export_package
-from modules.ml_readiness import analyze_ml_readiness, build_data_dictionary
+from modules.ml_readiness import (
+    analyze_ml_readiness,
+    build_data_dictionary,
+    detect_leakage_risks,
+    detect_sensitive_columns,
+)
+from modules.natural_language_cleaning import apply_plan, parse_instruction
 from modules.report_generator import generate_pdf_report
 from modules.visualization import create_plot
 
@@ -86,3 +99,91 @@ def test_current_pandas_bar_chart_and_pdf_export():
     assert len(scatter.data[0].x) == 3
     pdf = generate_pdf_report("# Test\n\n## Overview\nAll good.", [])
     assert pdf.startswith(b"%PDF")
+
+
+def test_natural_language_plan_is_validated_before_execution():
+    df = pd.DataFrame(
+        {
+            "Age": [20, None, 30, 30],
+            "City": [" ISLAMABAD ", "lahore", "Lahore", "Lahore"],
+        }
+    )
+    plan = parse_instruction(
+        "Remove duplicates, fill missing values in Age with median, "
+        "and standardize categories in City.",
+        df.columns.tolist(),
+    )
+    cleaned = apply_plan(df, plan)
+    assert cleaned["Age"].isna().sum() == 0
+    assert set(cleaned["City"]) == {"Islamabad", "Lahore"}
+    assert all(item["action"] in {
+        "remove_duplicates", "fill_missing", "standardize_categories"
+    } for item in plan)
+
+
+def test_sensitive_data_and_leakage_checks():
+    df = pd.DataFrame(
+        {
+            "email": [f"user{i}@example.com" for i in range(30)],
+            "target": [0, 1] * 15,
+            "copied_target": [0, 1] * 15,
+        }
+    )
+    sensitive = detect_sensitive_columns(df)
+    leakage = detect_leakage_risks(df, "target")
+    report = analyze_ml_readiness(df, "target")
+    assert sensitive["email"]
+    assert any("copied_target" in risk for risk in leakage)
+    assert report["score"] < 100
+
+
+def test_advanced_statistics_return_effect_sizes():
+    df = pd.DataFrame(
+        {
+            "value": [1, 2, 3, 4, 5, 6, 7, 8],
+            "group": ["A"] * 4 + ["B"] * 4,
+            "category": ["X", "X", "Y", "Y", "X", "Y", "X", "Y"],
+        }
+    )
+    assert "p_value" in normality_test(df["value"])
+    assert "effect_size_rank_biserial" in mann_whitney_test(
+        df, "value", "group"
+    )
+    assert "eta_squared" in one_way_anova(df, "value", "group")
+    assert "cramers_v" in chi_square_test(df, "group", "category")
+
+
+def test_automl_creates_reproducible_splits_and_downloadable_model():
+    rng = np.random.default_rng(42)
+    size = 120
+    df = pd.DataFrame(
+        {
+            "age": rng.integers(18, 70, size),
+            "income": rng.normal(50000, 10000, size),
+            "city": np.where(np.arange(size) % 2 == 0, "A", "B"),
+            "mixed_category": [1 if index % 3 == 0 else "unknown" for index in range(size)],
+        }
+    )
+    df["target"] = (df["age"] + df["income"] / 10000 > 42).astype(int)
+    splits = split_dataset(df, "target", random_state=7)
+    result = run_automl(df, "target", random_state=7)
+    assert sum(len(splits[name]) for name in ("train", "validation", "test")) == size
+    assert result["best_model_name"]
+    assert result["model_bytes"]
+    assert "f1_weighted" in result["test_metrics"]
+    package = build_export_package(
+        df,
+        "# AutoML Dataset",
+        build_data_dictionary(df),
+        [],
+        analyze_ml_readiness(df, "target"),
+        splits=result["splits"],
+        automl_summary={"best_model": result["best_model_name"]},
+        model_bytes=result["model_bytes"],
+    )
+    with zipfile.ZipFile(io.BytesIO(package)) as archive:
+        names = set(archive.namelist())
+    assert "data/train.csv" in names
+    assert "data/validation.csv" in names
+    assert "data/test.csv" in names
+    assert "model/best_model.joblib" in names
