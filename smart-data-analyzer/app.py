@@ -5,7 +5,14 @@ import streamlit as st
 import pandas as pd
 
 from modules.ai_cleaning import analyze_dataset, apply_suggestion
-from modules.ai_export_writer import generate_data_card
+from modules.advanced_statistics import (
+    chi_square_test,
+    mann_whitney_test,
+    normality_test,
+    one_way_anova,
+)
+from modules.ai_export_writer import generate_cleaning_plan, generate_data_card
+from modules.automl import run_automl, split_dataset
 from modules.data_loader import load_dataset_bytes
 from modules.data_cleaning import (
     clean_string_column,
@@ -32,10 +39,16 @@ from modules.export_tools import (
     dataframe_to_csv,
     dataframe_to_excel,
     dataframe_to_json,
+    dataframe_to_parquet,
     plot_to_image_bytes,
     statistics_to_csv,
 )
 from modules.ml_readiness import analyze_ml_readiness, build_data_dictionary
+from modules.natural_language_cleaning import (
+    apply_plan,
+    parse_instruction,
+    plan_summary,
+)
 from modules.report_generator import (
     generate_markdown_report,
     generate_pdf_report,
@@ -82,6 +95,14 @@ def init_state():
         st.session_state.generated_data_card = None
     if "data_card_provider" not in st.session_state:
         st.session_state.data_card_provider = None
+    if "nl_cleaning_plan" not in st.session_state:
+        st.session_state.nl_cleaning_plan = []
+    if "nl_cleaning_preview" not in st.session_state:
+        st.session_state.nl_cleaning_preview = None
+    if "automl_result" not in st.session_state:
+        st.session_state.automl_result = None
+    if "dataset_splits" not in st.session_state:
+        st.session_state.dataset_splits = None
 
 
 def commit_dataframe(new_df, action):
@@ -99,10 +120,19 @@ def commit_dataframe(new_df, action):
             "rows_before": before_rows,
             "rows_after": len(new_df),
             "columns_after": len(new_df.columns),
+            "missing_before": (
+                int(current.isna().sum().sum()) if current is not None else 0
+            ),
+            "missing_after": int(new_df.isna().sum().sum()),
+            "duplicates_after": int(new_df.duplicated().sum()),
         }
     )
     st.session_state.dashboard_charts = []
     st.session_state.generated_data_card = None
+    st.session_state.nl_cleaning_plan = []
+    st.session_state.nl_cleaning_preview = None
+    st.session_state.automl_result = None
+    st.session_state.dataset_splits = None
     refresh_suggestions()
 
 
@@ -114,6 +144,8 @@ def undo_last_change():
         st.session_state.transformation_history.pop()
     st.session_state.dashboard_charts = []
     st.session_state.generated_data_card = None
+    st.session_state.automl_result = None
+    st.session_state.dataset_splits = None
     refresh_suggestions()
     return True
 
@@ -159,6 +191,10 @@ def sidebar_upload():
                 st.session_state.dashboard_charts = []
                 st.session_state.dashboard_filters = []
                 st.session_state.generated_data_card = None
+                st.session_state.nl_cleaning_plan = []
+                st.session_state.nl_cleaning_preview = None
+                st.session_state.automl_result = None
+                st.session_state.dataset_splits = None
                 refresh_suggestions()
                 st.success(f"Loaded {len(df)} rows and {len(df.columns)} columns.")
 
@@ -169,6 +205,8 @@ def sidebar_upload():
             st.session_state.transformation_history = []
             st.session_state.dashboard_charts = []
             st.session_state.generated_data_card = None
+            st.session_state.automl_result = None
+            st.session_state.dataset_splits = None
             refresh_suggestions()
             st.sidebar.success("Reset to original dataset.")
         if st.sidebar.button(
@@ -374,6 +412,111 @@ def ai_suggestions_tab():
         st.success("All suggestions applied.")
 
 
+def natural_language_cleaning_tab():
+    st.header("Natural-Language Cleaning")
+    if st.session_state.df is None:
+        st.info("Upload a dataset to describe cleaning actions in plain English.")
+        return
+
+    st.caption(
+        "The app converts your request into allow-listed Pandas operations. "
+        "Nothing is applied until you review and approve the preview."
+    )
+    instruction = st.text_area(
+        "Describe the cleaning you want",
+        placeholder=(
+            "Example: Remove duplicates, fill missing values in Age with the median, "
+            "standardize categories in City, and normalize Income."
+        ),
+        key="nl_cleaning_instruction",
+    )
+    engine_label = st.selectbox(
+        "Instruction engine",
+        ["Automatic", "Rules only", "Local Ollama / Qwen", "Gemini", "Groq"],
+        key="nl_cleaning_engine",
+    )
+    provider_map = {
+        "Automatic": "auto",
+        "Rules only": "rules",
+        "Local Ollama / Qwen": "ollama",
+        "Gemini": "gemini",
+        "Groq": "groq",
+    }
+
+    if st.button("Build safe cleaning plan", key="build_nl_plan"):
+        if not instruction.strip():
+            st.warning("Enter a cleaning instruction first.")
+        else:
+            try:
+                plan = parse_instruction(
+                    instruction, st.session_state.df.columns.astype(str).tolist()
+                )
+                provider = "Built-in safe parser"
+                warning = None
+                selected_provider = provider_map[engine_label]
+                if not plan and selected_provider != "rules":
+                    plan, provider, warning = generate_cleaning_plan(
+                        instruction,
+                        st.session_state.df.columns.astype(str).tolist(),
+                        {
+                            str(column): str(dtype)
+                            for column, dtype in st.session_state.df.dtypes.items()
+                        },
+                        selected_provider,
+                    )
+                if not plan:
+                    st.session_state.nl_cleaning_plan = []
+                    st.session_state.nl_cleaning_preview = None
+                    st.warning(
+                        warning
+                        or "The request could not be mapped to supported safe actions."
+                    )
+                else:
+                    preview = apply_plan(st.session_state.df, plan)
+                    st.session_state.nl_cleaning_plan = plan
+                    st.session_state.nl_cleaning_preview = preview
+                    st.session_state.nl_cleaning_provider = provider
+            except Exception as exc:
+                st.session_state.nl_cleaning_plan = []
+                st.session_state.nl_cleaning_preview = None
+                st.error(f"Could not build the cleaning plan: {exc}")
+
+    plan = st.session_state.nl_cleaning_plan
+    preview = st.session_state.nl_cleaning_preview
+    if plan and preview is not None:
+        st.subheader("Review plan")
+        st.caption(
+            f"Interpreter: {st.session_state.get('nl_cleaning_provider', 'Safe parser')}"
+        )
+        for line in plan_summary(plan):
+            st.write(line)
+
+        current = st.session_state.df
+        metrics = st.columns(4)
+        metrics[0].metric("Rows before", len(current))
+        metrics[1].metric("Rows after", len(preview), len(preview) - len(current))
+        metrics[2].metric("Columns before", len(current.columns))
+        metrics[3].metric(
+            "Columns after",
+            len(preview.columns),
+            len(preview.columns) - len(current.columns),
+        )
+        st.dataframe(preview.head(20), width="stretch")
+        approve, discard = st.columns(2)
+        if approve.button(
+            "Approve and apply plan", type="primary", key="approve_nl_plan"
+        ):
+            commit_dataframe(preview, f"Natural-language plan: {instruction[:120]}")
+            st.session_state.nl_cleaning_plan = []
+            st.session_state.nl_cleaning_preview = None
+            st.success("The reviewed cleaning plan was applied.")
+            st.rerun()
+        if discard.button("Discard plan", key="discard_nl_plan"):
+            st.session_state.nl_cleaning_plan = []
+            st.session_state.nl_cleaning_preview = None
+            st.rerun()
+
+
 def data_cleaning_tab():
     st.header("Data Cleaning")
     st.write(
@@ -393,6 +536,8 @@ def data_cleaning_tab():
         st.session_state.transformation_history = []
         st.session_state.dashboard_charts = []
         st.session_state.generated_data_card = None
+        st.session_state.automl_result = None
+        st.session_state.dataset_splits = None
         refresh_suggestions()
         st.success("Dataset reset to original.")
 
@@ -601,6 +746,64 @@ def statistics_tab():
             except Exception as e:
                 st.error(f"T-test error: {e}")
 
+    st.subheader("Advanced statistical tests")
+    advanced_test = st.selectbox(
+        "Test",
+        ["Normality", "Mann-Whitney U", "One-way ANOVA", "Chi-square independence"],
+        key="advanced_test",
+    )
+    categorical_cols = [
+        column
+        for column in df.columns
+        if not pd.api.types.is_numeric_dtype(df[column])
+        or df[column].nunique(dropna=True) <= 20
+    ]
+    try:
+        if advanced_test == "Normality":
+            value_col = st.selectbox(
+                "Numeric column", [None] + numeric_cols, key="normality_value"
+            )
+            if value_col and st.button("Run normality test", key="run_normality"):
+                st.json(normality_test(df[value_col]))
+        elif advanced_test in {"Mann-Whitney U", "One-way ANOVA"}:
+            value_col = st.selectbox(
+                "Numeric outcome", [None] + numeric_cols, key="group_test_value"
+            )
+            group_col = st.selectbox(
+                "Group column", [None] + categorical_cols, key="group_test_group"
+            )
+            if (
+                value_col
+                and group_col
+                and st.button("Run group comparison", key="run_group_test")
+            ):
+                result = (
+                    mann_whitney_test(df, value_col, group_col)
+                    if advanced_test == "Mann-Whitney U"
+                    else one_way_anova(df, value_col, group_col)
+                )
+                st.json(result)
+        else:
+            first = st.selectbox(
+                "First categorical column",
+                [None] + categorical_cols,
+                key="chi_first",
+            )
+            second = st.selectbox(
+                "Second categorical column",
+                [None] + categorical_cols,
+                key="chi_second",
+            )
+            if (
+                first
+                and second
+                and first != second
+                and st.button("Run chi-square test", key="run_chi")
+            ):
+                st.json(chi_square_test(df, first, second))
+    except Exception as exc:
+        st.error(f"Statistical test error: {exc}")
+
 
 def report_generator_tab():
     st.header("Report Generator")
@@ -679,6 +882,140 @@ def ml_readiness_tab():
     st.dataframe(build_data_dictionary(df), width="stretch", hide_index=True)
 
 
+def automl_tab():
+    st.header("AutoML Workbench")
+    if st.session_state.df is None:
+        st.info("Upload a dataset to prepare splits and compare baseline models.")
+        return
+
+    df = st.session_state.df
+    if len(df.columns) < 2:
+        st.warning("AutoML requires at least one feature and one target column.")
+        return
+
+    target = st.selectbox(
+        "Target column", df.columns.tolist(), key="automl_target_select"
+    )
+    problem_label = st.selectbox(
+        "Problem type",
+        ["Automatic", "Classification", "Regression"],
+        key="automl_problem_type",
+    )
+    problem_type = problem_label.lower()
+    if problem_type == "automatic":
+        problem_type = "auto"
+    readiness = analyze_ml_readiness(df, target)
+    suggested_exclusions = list(
+        dict.fromkeys(
+            readiness.get("potential_identifiers", [])
+            + list(readiness.get("sensitive_columns", {}).keys())
+        )
+    )
+    excluded_features = st.multiselect(
+        "Exclude features from modelling",
+        [column for column in df.columns if column != target],
+        default=[
+            column for column in suggested_exclusions if column != target
+        ],
+        help="Potential identifiers and sensitive fields are excluded by default.",
+        key="automl_excluded_features",
+    )
+    random_state = int(
+        st.number_input(
+            "Random seed",
+            min_value=0,
+            max_value=100000,
+            value=42,
+            step=1,
+            key="automl_seed",
+        )
+    )
+
+    split_col, run_col = st.columns(2)
+    if split_col.button("Create train/validation/test splits", key="create_splits"):
+        try:
+            splits = split_dataset(
+                df,
+                target,
+                problem_type=problem_type,
+                random_state=random_state,
+            )
+            st.session_state.dataset_splits = splits
+            st.success(
+                f"Created {len(splits['train'])} training, "
+                f"{len(splits['validation'])} validation and "
+                f"{len(splits['test'])} test rows."
+            )
+        except Exception as exc:
+            st.error(f"Could not create splits: {exc}")
+
+    if run_col.button("Compare baseline models", type="primary", key="run_automl"):
+        try:
+            with st.spinner("Training and comparing compact baseline models..."):
+                result = run_automl(
+                    df,
+                    target,
+                    problem_type=problem_type,
+                    random_state=random_state,
+                    exclude_features=excluded_features,
+                )
+            st.session_state.automl_result = result
+            st.session_state.dataset_splits = result["splits"]
+            st.success(f"Best validation model: {result['best_model_name']}")
+        except Exception as exc:
+            st.session_state.automl_result = None
+            st.error(f"AutoML could not complete: {exc}")
+
+    splits = st.session_state.dataset_splits
+    if splits:
+        st.subheader("Reproducible splits")
+        split_metrics = st.columns(3)
+        for column, name in zip(split_metrics, ("train", "validation", "test")):
+            column.metric(name.title(), len(splits[name]))
+            column.download_button(
+                f"Download {name}",
+                data=dataframe_to_csv(splits[name]),
+                file_name=f"{name}.csv",
+                mime="text/csv",
+                key=f"download_{name}_split",
+            )
+
+    result = st.session_state.automl_result
+    if result:
+        st.subheader("Model comparison")
+        st.caption(
+            f"Problem: {result['problem_type']} · Target: {result['target']} · "
+            f"Rows used: {result['sampled_rows']:,}"
+        )
+        if result["excluded_features"]:
+            st.caption(
+                "Excluded features: " + ", ".join(result["excluded_features"])
+            )
+        st.dataframe(result["results"], width="stretch", hide_index=True)
+        left, right = st.columns(2)
+        left.write("**Best validation metrics**")
+        left.json(result["validation_metrics"])
+        right.write("**Held-out test metrics**")
+        right.json(result["test_metrics"])
+
+        if not result["feature_importance"].empty:
+            st.subheader("Most influential features")
+            importance = result["feature_importance"].set_index("feature")
+            st.bar_chart(importance)
+
+        st.download_button(
+            "Download trained preprocessing and model pipeline",
+            data=result["model_bytes"],
+            file_name="best_model.joblib",
+            mime="application/octet-stream",
+            key="download_automl_model",
+        )
+        st.caption(
+            "AutoML results are baselines, not proof of real-world validity. "
+            "Review leakage, fairness, sampling and domain assumptions."
+        )
+
+
 def export_tab():
     st.header("AI Export Studio")
 
@@ -706,7 +1043,9 @@ def export_tab():
         "Groq": "groq",
         "Built-in professional writer": "template",
     }
-    quality = analyze_ml_readiness(df)
+    automl_result = st.session_state.automl_result
+    quality_target = automl_result["target"] if automl_result else None
+    quality = analyze_ml_readiness(df, quality_target)
 
     if st.button("Generate export documentation", type="primary"):
         with st.spinner("Writing the dataset documentation..."):
@@ -732,6 +1071,19 @@ def export_tab():
             mime="text/markdown",
         )
 
+        automl_summary = None
+        model_bytes = None
+        if automl_result:
+            automl_summary = {
+                "problem_type": automl_result["problem_type"],
+                "target": automl_result["target"],
+                "best_model": automl_result["best_model_name"],
+                "excluded_features": automl_result["excluded_features"],
+                "validation_metrics": automl_result["validation_metrics"],
+                "test_metrics": automl_result["test_metrics"],
+                "comparison": automl_result["results"].to_dict(orient="records"),
+            }
+            model_bytes = automl_result["model_bytes"]
         package = build_export_package(
             df,
             st.session_state.generated_data_card,
@@ -739,6 +1091,9 @@ def export_tab():
             st.session_state.transformation_history,
             quality,
             st.session_state.original_df,
+            st.session_state.dataset_splits,
+            automl_summary,
+            model_bytes,
         )
         st.download_button(
             "Download complete publishing package",
@@ -756,17 +1111,29 @@ def export_tab():
         file_name="cleaned_dataset.csv",
         mime="text/csv",
     )
-    st.download_button(
-        "Download Excel",
-        data=dataframe_to_excel(df),
-        file_name="cleaned_dataset.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    if len(df) <= 1_048_575:
+        st.download_button(
+            "Download Excel",
+            data=dataframe_to_excel(df),
+            file_name="cleaned_dataset.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.info(
+            "Excel export is unavailable above 1,048,575 data rows; use CSV, "
+            "JSON, or the Parquet file in the publishing package."
+        )
     st.download_button(
         "Download JSON",
         data=dataframe_to_json(df),
         file_name="cleaned_dataset.json",
         mime="application/json",
+    )
+    st.download_button(
+        "Download Parquet",
+        data=dataframe_to_parquet(df),
+        file_name="cleaned_dataset.parquet",
+        mime="application/octet-stream",
     )
 
     st.subheader("3. Statistics")
@@ -796,44 +1163,56 @@ def main():
     sidebar_cleaning_tools()
 
     tabs = st.tabs(
-        [
-            "Data Preview",
-            "AI Suggestions",
-            "Data Cleaning",
-            "Dataset Profiling",
-            "Visualization",
-            "Interactive Dashboard",
-            "Statistics",
-            "ML Readiness",
-            "Report Generator",
-            "AI Export Studio",
-        ]
+        ["Understand", "Clean", "Visualize", "Analyze", "AutoML", "Publish"]
     )
 
     with tabs[0]:
-        data_preview_tab()
+        preview_tab, profile_tab = st.tabs(["Preview", "Profiling"])
+        with preview_tab:
+            data_preview_tab()
+        with profile_tab:
+            profiling_tab()
+
     with tabs[1]:
-        ai_suggestions_tab()
+        suggestions_tab, language_tab, history_tab = st.tabs(
+            ["Smart Suggestions", "Natural Language", "History"]
+        )
+        with suggestions_tab:
+            ai_suggestions_tab()
+        with language_tab:
+            natural_language_cleaning_tab()
+        with history_tab:
+            data_cleaning_tab()
+
     with tabs[2]:
-        data_cleaning_tab()
+        chart_tab, dashboard_workspace = st.tabs(["Charts", "Dashboard"])
+        with chart_tab:
+            visualization_tab()
+        with dashboard_workspace:
+            dashboard_tab()
+
     with tabs[3]:
-        profiling_tab()
+        statistics_workspace, readiness_workspace = st.tabs(
+            ["Statistics", "ML Readiness"]
+        )
+        with statistics_workspace:
+            statistics_tab()
+        with readiness_workspace:
+            ml_readiness_tab()
+
     with tabs[4]:
-        visualization_tab()
+        automl_tab()
+
     with tabs[5]:
-        dashboard_tab()
-    with tabs[6]:
-        statistics_tab()
-    with tabs[7]:
-        ml_readiness_tab()
-    with tabs[8]:
-        report_generator_tab()
-    with tabs[9]:
-        export_tab()
+        report_tab, export_workspace = st.tabs(["Reports", "AI Export Studio"])
+        with report_tab:
+            report_generator_tab()
+        with export_workspace:
+            export_tab()
 
     st.markdown("---")
     st.caption(
-        "Built with Streamlit, pandas, Plotly, SciPy, scikit-learn, and optimized for interactive data analysis."
+        "Privacy-aware data cleaning, statistical analysis, AutoML, and publishing."
     )
 
 
