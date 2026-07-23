@@ -1,7 +1,7 @@
 import io
 import json
 import zipfile
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -40,6 +40,9 @@ def build_export_package(
     history: List[Dict[str, Any]],
     quality_report: Dict[str, Any],
     original_df: pd.DataFrame = None,
+    splits: Optional[Dict[str, Any]] = None,
+    automl_summary: Optional[Dict[str, Any]] = None,
+    model_bytes: Optional[bytes] = None,
 ) -> bytes:
     """Create a self-documenting, reproducible dataset export ZIP."""
     buffer = io.BytesIO()
@@ -61,6 +64,20 @@ def build_export_package(
             "documentation/transformation_history.json",
             json.dumps(history, indent=2, default=str),
         )
+        if splits:
+            for name in ("train", "validation", "test"):
+                split = splits.get(name)
+                if isinstance(split, pd.DataFrame):
+                    archive.writestr(
+                        f"data/{name}.csv", dataframe_to_csv(split)
+                    )
+        if automl_summary:
+            archive.writestr(
+                "model/automl_results.json",
+                json.dumps(automl_summary, indent=2, default=str),
+            )
+        if model_bytes:
+            archive.writestr("model/best_model.joblib", model_bytes)
         archive.writestr(
             "reproduce.py",
             (
