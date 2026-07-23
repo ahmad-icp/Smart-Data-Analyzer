@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 from .export_tools import plot_to_image_bytes
 
@@ -77,26 +78,32 @@ def generate_pdf_report(
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, title, ln=True)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(4)
 
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Helvetica", size=10)
 
     lines = markdown_text.splitlines()
     for line in lines:
         if line.startswith("# "):
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 8, line.replace("# ", ""), ln=True)
-            pdf.set_font("Arial", size=10)
+            pdf.set_font("Helvetica", "B", 14)
+            pdf.cell(
+                0, 8, line.replace("# ", ""), new_x=XPos.LMARGIN, new_y=YPos.NEXT
+            )
+            pdf.set_font("Helvetica", size=10)
         elif line.startswith("## "):
-            pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 7, line.replace("## ", ""), ln=True)
-            pdf.set_font("Arial", size=10)
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(
+                0, 7, line.replace("## ", ""), new_x=XPos.LMARGIN, new_y=YPos.NEXT
+            )
+            pdf.set_font("Helvetica", size=10)
         elif line.startswith("### "):
-            pdf.set_font("Arial", "B", 11)
-            pdf.cell(0, 6, line.replace("### ", ""), ln=True)
-            pdf.set_font("Arial", size=10)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(
+                0, 6, line.replace("### ", ""), new_x=XPos.LMARGIN, new_y=YPos.NEXT
+            )
+            pdf.set_font("Helvetica", size=10)
         else:
             pdf.multi_cell(0, 5, line)
 
@@ -108,13 +115,22 @@ def generate_pdf_report(
             image_bytes = base64.b64decode(image_b64)
             img_buffer = io.BytesIO(image_bytes)
             pdf.add_page()
-            pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 8, chart.get("title", "Chart"), ln=True)
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(
+                0,
+                8,
+                chart.get("title", "Chart"),
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+            )
             pdf.image(img_buffer, w=180)
         except Exception:
             continue
 
-    return pdf.output(dest="S").encode("utf-8")
+    output = pdf.output()
+    if isinstance(output, str):
+        return output.encode("latin-1")
+    return bytes(output)
 
 
 def build_chart_image_base64(fig) -> Optional[str]:
