@@ -1,6 +1,66 @@
+import re
 from typing import Any, Dict, Optional
 
 import pandas as pd
+
+
+SENSITIVE_NAME_PATTERN = re.compile(
+    r"(^|_|\s)(email|e-mail|phone|mobile|address|cnic|ssn|passport|"
+    r"national.?id|full.?name|ip.?address|credit.?card)($|_|\s)",
+    re.IGNORECASE,
+)
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PHONE_PATTERN = re.compile(r"^\+?[\d\s().-]{8,20}$")
+
+
+def detect_sensitive_columns(df: pd.DataFrame) -> Dict[str, str]:
+    findings: Dict[str, str] = {}
+    for column in df.columns:
+        name = str(column)
+        if SENSITIVE_NAME_PATTERN.search(name):
+            findings[name] = "sensitive column name"
+            continue
+        values = df[column].dropna().astype(str).head(200)
+        if values.empty:
+            continue
+        email_matches = values.str.match(EMAIL_PATTERN).mean()
+        phone_matches = values.str.match(PHONE_PATTERN).mean()
+        if email_matches >= 0.2:
+            findings[name] = "email-like values"
+        elif phone_matches >= 0.5:
+            findings[name] = "phone/identifier-like values"
+    return findings
+
+
+def detect_leakage_risks(df: pd.DataFrame, target: Optional[str]) -> list:
+    if not target or target not in df.columns:
+        return []
+    risks = []
+    target_series = df[target]
+    for column in df.columns:
+        if column == target:
+            continue
+        feature = df[column]
+        comparable = pd.concat([feature, target_series], axis=1).dropna()
+        if comparable.empty:
+            continue
+        if comparable.iloc[:, 0].astype(str).equals(
+            comparable.iloc[:, 1].astype(str)
+        ):
+            risks.append(f"'{column}' duplicates the target.")
+            continue
+        if (
+            pd.api.types.is_numeric_dtype(feature)
+            and pd.api.types.is_numeric_dtype(target_series)
+            and len(comparable) >= 10
+        ):
+            correlation = comparable.iloc[:, 0].corr(comparable.iloc[:, 1])
+            if pd.notna(correlation) and abs(float(correlation)) >= 0.995:
+                risks.append(
+                    f"'{column}' has near-perfect correlation with the target "
+                    f"({float(correlation):.3f})."
+                )
+    return risks
 
 
 def build_data_dictionary(df: pd.DataFrame) -> pd.DataFrame:
@@ -69,6 +129,17 @@ def analyze_ml_readiness(
         issues.append("High-cardinality text columns: " + ", ".join(high_cardinality[:8]))
         recommendations.append("Encode, group, or vectorize high-cardinality features.")
 
+    sensitive_columns = detect_sensitive_columns(df)
+    if sensitive_columns:
+        score -= min(15, len(sensitive_columns) * 3)
+        issues.append(
+            "Potentially sensitive columns: "
+            + ", ".join(list(sensitive_columns)[:8])
+        )
+        recommendations.append(
+            "Remove, mask, or document sensitive fields before sharing."
+        )
+
     target_summary = None
     if target and target in df.columns:
         counts = df[target].value_counts(normalize=True, dropna=True)
@@ -86,6 +157,14 @@ def analyze_ml_readiness(
             issues.append(f"Target '{target}' contains missing values.")
             recommendations.append("Resolve rows with missing target values.")
 
+    leakage_risks = detect_leakage_risks(df, target)
+    if leakage_risks:
+        score -= min(25, len(leakage_risks) * 8)
+        issues.extend(["Possible leakage: " + risk for risk in leakage_risks])
+        recommendations.append(
+            "Remove leakage candidates and re-evaluate the model on held-out data."
+        )
+
     if len(df) < 100:
         score -= 10
         issues.append("The dataset has fewer than 100 rows.")
@@ -101,6 +180,8 @@ def analyze_ml_readiness(
         "missing_rate": round(missing_rate, 4),
         "duplicate_rate": round(duplicate_rate, 4),
         "potential_identifiers": identifier_columns,
+        "sensitive_columns": sensitive_columns,
+        "leakage_risks": leakage_risks,
         "target": target_summary,
         "issues": issues,
         "recommendations": recommendations,
