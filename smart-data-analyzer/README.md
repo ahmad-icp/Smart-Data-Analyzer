@@ -9,17 +9,38 @@ writing code.
 - Imports CSV, TSV, Excel, JSON/JSONL, and Parquet data.
 - Profiles schema, missingness, duplicates, distributions, and correlations.
 - Applies explainable cleaning operations with undo and transformation history.
+- Converts natural-language requests into allow-listed cleaning plans with
+  before/after preview and explicit approval.
 - Builds filtered interactive Plotly dashboards.
-- Runs descriptive statistics, regression, and hypothesis tests.
-- Produces an explainable ML-readiness score and data dictionary.
+- Runs descriptive statistics, regression, normality, Mann-Whitney U, ANOVA,
+  chi-square, and effect-size analysis.
+- Produces an explainable ML-readiness score, data dictionary, potential leakage
+  warnings, and sensitive-column checks.
+- Creates reproducible train/validation/test splits.
+- Compares classification or regression baselines, evaluates the winner on held-out
+  data, explains feature importance, and exports the trained pipeline.
 - Generates polished dataset documentation with local Qwen/Ollama, Gemini, Groq, or
   a deterministic professional fallback.
-- Exports a complete ZIP containing cleaned data, README, quality report, data
-  dictionary, history, and a reproducibility script.
+- Exports a complete ZIP containing original and cleaned data, optional ML splits and
+  model, README, quality report, data dictionary, history, and a reproducibility
+  script.
 
-AI never edits the DataFrame directly. It writes documentation from schema and
+AI never executes generated code or edits the DataFrame directly. Natural-language
+requests become a restricted JSON plan, are validated against known columns and safe
+operations, and require user approval. Documentation writers receive schema and
 aggregate quality metrics; raw records and example values are not sent to cloud
-providers. Deterministic Pandas functions perform data changes.
+providers.
+
+## Workspace
+
+The interface is organized into six focused areas:
+
+1. **Understand** — preview and profile the dataset.
+2. **Clean** — smart suggestions, natural-language plans, and history.
+3. **Visualize** — charts and interactive dashboards.
+4. **Analyze** — statistics, privacy/leakage checks, and ML readiness.
+5. **AutoML** — reproducible splitting, model comparison, and downloads.
+6. **Publish** — reports and the complete AI-assisted export package.
 
 ## Run locally
 
