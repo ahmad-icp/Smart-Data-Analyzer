@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 
 import streamlit as st
 import pandas as pd
@@ -77,7 +76,7 @@ from modules.visualization import create_plot, suggest_chart_types
 
 st.set_page_config(
     page_title="Smart Data Analyzer Pro",
-    page_icon="📊",
+    page_icon="S",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -214,16 +213,331 @@ def apply_modern_theme():
 def render_welcome():
     st.markdown(
         """
-        <div class="sda-hero">
-          Upload a dataset from the sidebar to begin. Every operation is previewable,
-          reversible, and designed to keep raw data private.
-        </div>
         <div class="sda-grid">
-          <div class="sda-card"><strong>Understand</strong>Profile quality, schema and distributions.</div>
-          <div class="sda-card"><strong>Clean safely</strong>Use guided tools or approved natural-language plans.</div>
-          <div class="sda-card"><strong>Analyze deeply</strong>Basic, inferential, robust and regression statistics.</div>
-          <div class="sda-card"><strong>Model & publish</strong>Build baselines and export reproducible packages.</div>
+          <div class="sda-card"><span class="sda-step">01 / IMPORT</span><strong>Connect your data</strong>Upload CSV, Excel, JSON or Parquet from the secure workspace.</div>
+          <div class="sda-card"><span class="sda-step">02 / PREPARE</span><strong>Resolve quality issues</strong>Review, clean and transform with a complete audit trail.</div>
+          <div class="sda-card"><span class="sda-step">03 / ANALYZE</span><strong>Build defensible insight</strong>Explore visual, statistical and machine-learning evidence.</div>
+          <div class="sda-card"><span class="sda-step">04 / DELIVER</span><strong>Publish reproducibly</strong>Export reports, models and documented analysis packages.</div>
         </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_premium_theme():
+    """Refine the interface into a restrained professional analytics product."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --ink: #101828;
+            --muted: #667085;
+            --line: #e4e7ec;
+            --canvas: #f5f6f8;
+            --surface: #ffffff;
+            --nav: #0b1220;
+            --nav-soft: #121c2e;
+            --accent: #4f6ef7;
+            --accent-dark: #3b55d9;
+        }
+        .stApp {
+            background: var(--canvas) !important;
+            color: var(--ink);
+        }
+        html, body, [class*="css"] {
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont,
+                "Segoe UI", sans-serif;
+        }
+        [data-testid="stHeader"] { background: transparent; }
+        [data-testid="stDecoration"], #MainMenu, footer { display: none; }
+        [data-testid="stSidebar"] {
+            background: var(--nav) !important;
+            border-right: 1px solid #1f2937 !important;
+        }
+        [data-testid="stSidebar"] > div:first-child { padding-top: 1.1rem; }
+        [data-testid="stSidebar"] * { color: #e5e7eb; }
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 { color: #ffffff !important; }
+        [data-testid="stSidebar"] [data-testid="stMetric"] {
+            background: var(--nav-soft) !important;
+            border-color: #273449 !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+            color: #98a2b3 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+            color: #ffffff !important;
+        }
+        [data-testid="stSidebar"] .stButton button {
+            background: var(--nav-soft) !important;
+            border: 1px solid #2a384e !important;
+            color: #f8fafc !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stSidebar"] .stButton button:hover {
+            background: #1a2940 !important;
+            border-color: #44546d !important;
+            transform: none !important;
+        }
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea {
+            background: var(--nav-soft) !important;
+            border-color: #2a384e !important;
+        }
+        .sda-brand {
+            display: flex;
+            align-items: center;
+            gap: .8rem;
+            padding: .35rem .1rem 1.1rem;
+            margin-bottom: .75rem;
+            border-bottom: 1px solid #243044;
+        }
+        .sda-monogram {
+            display: grid;
+            place-items: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border: 1px solid #53657f;
+            border-radius: 7px;
+            color: #ffffff;
+            background: #152238;
+            font-size: .68rem;
+            font-weight: 750;
+            letter-spacing: .08em;
+        }
+        .sda-brand-copy strong {
+            display: block;
+            color: #ffffff;
+            font-size: .9rem;
+            font-weight: 650;
+            line-height: 1.15;
+        }
+        .sda-brand-copy span {
+            color: #8491a5;
+            font-size: .7rem;
+            letter-spacing: .04em;
+        }
+        .block-container {
+            max-width: 1440px !important;
+            padding: 2.2rem 2.5rem 3.5rem !important;
+        }
+        h1, h2, h3 {
+            color: var(--ink) !important;
+            letter-spacing: -.03em !important;
+        }
+        h1 {
+            background: none !important;
+            -webkit-text-fill-color: initial !important;
+            font-size: clamp(2rem, 3vw, 2.8rem) !important;
+            font-weight: 720 !important;
+            line-height: 1.08 !important;
+            margin-bottom: .8rem !important;
+        }
+        h2 { font-weight: 680 !important; }
+        h3 { font-weight: 650 !important; }
+        p, label { color: var(--muted); }
+        div[data-testid="stMetric"] {
+            background: var(--surface) !important;
+            border: 1px solid var(--line) !important;
+            border-top: 2px solid #c8d1fa !important;
+            border-radius: 8px !important;
+            padding: 1rem 1.15rem !important;
+            box-shadow: 0 1px 2px rgba(16,24,40,.035) !important;
+        }
+        div[data-testid="stMetricLabel"] {
+            color: var(--muted) !important;
+            font-size: .75rem !important;
+            letter-spacing: .035em;
+            text-transform: uppercase;
+        }
+        div[data-testid="stMetricValue"] {
+            color: var(--ink) !important;
+            font-weight: 680 !important;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 1.4rem !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: 0 !important;
+            border-bottom: 1px solid var(--line) !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: auto !important;
+            padding: .78rem .05rem .7rem !important;
+            border: 0 !important;
+            border-bottom: 2px solid transparent !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            color: #667085 !important;
+            font-size: .87rem !important;
+            font-weight: 560 !important;
+        }
+        .stTabs [aria-selected="true"] {
+            background: transparent !important;
+            border-bottom-color: var(--accent) !important;
+            color: var(--ink) !important;
+        }
+        .stButton button, .stDownloadButton button {
+            min-height: 2.55rem !important;
+            border: 1px solid #d0d5dd !important;
+            border-radius: 7px !important;
+            font-weight: 620 !important;
+            box-shadow: 0 1px 2px rgba(16,24,40,.04) !important;
+            transition: border-color .12s ease, background .12s ease !important;
+        }
+        .stButton button:hover, .stDownloadButton button:hover {
+            transform: none !important;
+            border-color: #98a2b3 !important;
+            box-shadow: 0 1px 2px rgba(16,24,40,.06) !important;
+        }
+        .stButton button[kind="primary"],
+        .stDownloadButton button[kind="primary"] {
+            background: var(--accent) !important;
+            border-color: var(--accent) !important;
+            color: #ffffff !important;
+        }
+        .stButton button[kind="primary"]:hover,
+        .stDownloadButton button[kind="primary"]:hover {
+            background: var(--accent-dark) !important;
+            border-color: var(--accent-dark) !important;
+        }
+        [data-testid="stFileUploaderDropzone"] {
+            border: 1px dashed #98a2b3 !important;
+            border-radius: 8px !important;
+            background: #f9fafb !important;
+        }
+        [data-testid="stDataFrame"] {
+            border: 1px solid var(--line) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 1px 2px rgba(16,24,40,.03) !important;
+        }
+        div[data-testid="stExpander"] {
+            border: 1px solid var(--line) !important;
+            border-radius: 8px !important;
+            background: var(--surface) !important;
+        }
+        .sda-hero {
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 2rem;
+            padding: 1.15rem 1.35rem !important;
+            margin: 0 0 1.8rem !important;
+            border: 1px solid #1f2b3d !important;
+            border-radius: 9px !important;
+            background: linear-gradient(115deg, #0b1220 0%, #152238 70%, #182945 100%) !important;
+            color: #dbe3ef !important;
+            box-shadow: 0 8px 24px rgba(15,23,42,.09) !important;
+        }
+        .sda-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0 0 0 auto;
+            width: 38%;
+            opacity: .13;
+            background-image:
+                linear-gradient(#7c91b3 1px, transparent 1px),
+                linear-gradient(90deg, #7c91b3 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: linear-gradient(90deg, transparent, #000);
+        }
+        .sda-hero-copy {
+            position: relative;
+            z-index: 1;
+            color: #aebbd0;
+            font-size: .9rem;
+            line-height: 1.5;
+        }
+        .sda-hero-copy strong {
+            display: block;
+            margin-bottom: .12rem;
+            color: #ffffff;
+            font-size: .98rem;
+            font-weight: 640;
+        }
+        .sda-status {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: .4rem;
+        }
+        .sda-status span {
+            padding: .3rem .52rem;
+            border: 1px solid #3b4b64;
+            border-radius: 5px;
+            background: rgba(255,255,255,.035);
+            color: #c8d2e1;
+            font-size: .66rem;
+            letter-spacing: .03em;
+            white-space: nowrap;
+        }
+        .sda-grid {
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important;
+            gap: 0 !important;
+            margin: 0 0 1.7rem !important;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            background: var(--surface);
+        }
+        .sda-card {
+            min-height: 8rem;
+            padding: 1.15rem !important;
+            border: 0 !important;
+            border-right: 1px solid var(--line) !important;
+            border-radius: 0 !important;
+            background: var(--surface) !important;
+            color: var(--muted) !important;
+            font-size: .81rem;
+            line-height: 1.45;
+        }
+        .sda-card:last-child { border-right: 0 !important; }
+        .sda-step {
+            display: block;
+            margin-bottom: 1.1rem;
+            color: #98a2b3;
+            font-size: .66rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+        }
+        .sda-card strong {
+            display: block;
+            margin-bottom: .3rem !important;
+            color: var(--ink) !important;
+            font-size: .9rem;
+            font-weight: 640;
+        }
+        @media (max-width: 900px) {
+            .block-container { padding: 1.5rem 1.1rem 2.5rem !important; }
+            .sda-grid { grid-template-columns: repeat(2, 1fr) !important; }
+            .sda-card:nth-child(2) { border-right: 0 !important; }
+            .sda-card:nth-child(-n+2) { border-bottom: 1px solid var(--line) !important; }
+            .sda-status { display: none; }
+        }
+        @media (max-width: 600px) {
+            .sda-grid { grid-template-columns: 1fr !important; }
+            .sda-card {
+                min-height: auto;
+                border-right: 0 !important;
+                border-bottom: 1px solid var(--line) !important;
+            }
+            .sda-card:last-child { border-bottom: 0 !important; }
+            .stTabs [data-baseweb="tab-list"] {
+                gap: .85rem !important;
+                overflow-x: auto;
+            }
+        }
+        </style>
         """,
         unsafe_allow_html=True,
     )
@@ -1552,19 +1866,36 @@ def export_tab():
 def main():
     init_state()
     apply_modern_theme()
+    apply_premium_theme()
 
-    # Use path relative to the app file for assets (works regardless of working directory)
-    app_dir = Path(__file__).resolve().parent
-    logo_path = app_dir / "assets" / "logo.png"
-    if logo_path.exists():
-        st.sidebar.image(str(logo_path), width=220)
-    else:
-        st.sidebar.write("**Smart Data Analyzer Pro**")
+    st.sidebar.markdown(
+        """
+        <div class="sda-brand">
+          <div class="sda-monogram">SDA</div>
+          <div class="sda-brand-copy">
+            <strong>Smart Data Analyzer</strong>
+            <span>PROFESSIONAL WORKSPACE</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     st.title("Smart Data Analyzer Pro")
     st.markdown(
-        '<div class="sda-hero"><strong>From raw data to defensible insight.</strong> '
-        "Clean, visualize, test, model and publish from one privacy-aware workspace.</div>",
+        """
+        <div class="sda-hero">
+          <div class="sda-hero-copy">
+            <strong>From raw data to defensible insight</strong>
+            A focused environment for preparation, analysis, modelling and delivery.
+          </div>
+          <div class="sda-status">
+            <span>PRIVATE PROCESSING</span>
+            <span>AUDITABLE WORKFLOW</span>
+            <span>EXPORT READY</span>
+          </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -1576,12 +1907,12 @@ def main():
 
     tabs = st.tabs(
         [
-            "🔎 Understand",
-            "✨ Clean",
-            "📈 Visualize",
-            "🧪 Analyze",
-            "🤖 AutoML",
-            "🚀 Publish",
+            "Understand",
+            "Prepare",
+            "Visualize",
+            "Analyze",
+            "AutoML",
+            "Publish",
         ]
     )
 
