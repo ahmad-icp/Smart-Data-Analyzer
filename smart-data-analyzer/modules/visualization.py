@@ -40,7 +40,13 @@ def create_plot(df: pd.DataFrame, chart_type: str, x: str = None, y: str = None)
             raise ValueError("Select an X column for bar chart")
         if y is None:
             # show counts
-            return px.bar(df[x].value_counts().reset_index(name="count"), x="index", y="count", title=f"Bar chart: {x}")
+            counts = (
+                df[x]
+                .value_counts(dropna=False)
+                .rename_axis(x)
+                .reset_index(name="count")
+            )
+            return px.bar(counts, x=x, y="count", title=f"Bar chart: {x}")
         return px.bar(df, x=x, y=y, title=f"Bar chart: {y} by {x}")
 
     if chart_type in ["line"]:
@@ -51,7 +57,7 @@ def create_plot(df: pd.DataFrame, chart_type: str, x: str = None, y: str = None)
     if chart_type in ["scatter"]:
         if x is None or y is None:
             raise ValueError("Select X and Y columns for scatter plot")
-        return px.scatter(df, x=x, y=y, title=f"Scatter: {y} vs {x}", trendline="ols")
+        return px.scatter(df, x=x, y=y, title=f"Scatter: {y} vs {x}")
 
     if chart_type in ["box"]:
         if y is None:
