@@ -1,15 +1,15 @@
-import os
+import hashlib
 from pathlib import Path
 
 import streamlit as st
 import pandas as pd
 
 from modules.ai_cleaning import analyze_dataset, apply_suggestion
+from modules.ai_export_writer import generate_data_card
 from modules.data_loader import load_dataset_bytes
 from modules.data_cleaning import (
     clean_string_column,
     convert_column_type,
-    drop_columns,
     extract_date_parts,
     fill_missing,
     log_transform,
@@ -18,8 +18,6 @@ from modules.data_cleaning import (
     remove_duplicates,
     remove_missing,
     replace_values,
-    sort_dataframe,
-    standardize_categories,
 )
 from modules.data_profiling import (
     column_statistics,
@@ -30,10 +28,14 @@ from modules.data_profiling import (
 )
 from modules.dashboard_builder import apply_filters, create_dashboard_chart
 from modules.export_tools import (
+    build_export_package,
     dataframe_to_csv,
+    dataframe_to_excel,
+    dataframe_to_json,
     plot_to_image_bytes,
     statistics_to_csv,
 )
+from modules.ml_readiness import analyze_ml_readiness, build_data_dictionary
 from modules.report_generator import (
     generate_markdown_report,
     generate_pdf_report,
@@ -70,6 +72,50 @@ def init_state():
         st.session_state.dashboard_charts = []
     if "dashboard_filters" not in st.session_state:
         st.session_state.dashboard_filters = []
+    if "undo_stack" not in st.session_state:
+        st.session_state.undo_stack = []
+    if "transformation_history" not in st.session_state:
+        st.session_state.transformation_history = []
+    if "loaded_file_id" not in st.session_state:
+        st.session_state.loaded_file_id = None
+    if "generated_data_card" not in st.session_state:
+        st.session_state.generated_data_card = None
+    if "data_card_provider" not in st.session_state:
+        st.session_state.data_card_provider = None
+
+
+def commit_dataframe(new_df, action):
+    """Save an auditable mutation and preserve a bounded undo snapshot."""
+    current = st.session_state.df
+    if current is not None:
+        st.session_state.undo_stack.append(current.copy(deep=True))
+        st.session_state.undo_stack = st.session_state.undo_stack[-10:]
+    before_rows = len(current) if current is not None else 0
+    st.session_state.df = new_df.copy()
+    st.session_state.transformation_history.append(
+        {
+            "step": len(st.session_state.transformation_history) + 1,
+            "action": action,
+            "rows_before": before_rows,
+            "rows_after": len(new_df),
+            "columns_after": len(new_df.columns),
+        }
+    )
+    st.session_state.dashboard_charts = []
+    st.session_state.generated_data_card = None
+    refresh_suggestions()
+
+
+def undo_last_change():
+    if not st.session_state.undo_stack:
+        return False
+    st.session_state.df = st.session_state.undo_stack.pop()
+    if st.session_state.transformation_history:
+        st.session_state.transformation_history.pop()
+    st.session_state.dashboard_charts = []
+    st.session_state.generated_data_card = None
+    refresh_suggestions()
+    return True
 
 
 def load_dataset_from_uploader(uploaded_file):
@@ -95,22 +141,41 @@ def refresh_suggestions():
 def sidebar_upload():
     st.sidebar.title("Upload Dataset")
     uploaded_file = st.sidebar.file_uploader(
-        "Upload CSV or Excel", type=["csv", "xlsx"], accept_multiple_files=False
+        "Upload CSV, Excel, JSON, TSV or Parquet",
+        type=["csv", "tsv", "xlsx", "xls", "json", "jsonl", "parquet"],
+        accept_multiple_files=False,
     )
 
     if uploaded_file is not None:
-        df = load_dataset_from_uploader(uploaded_file)
-        if df is not None:
-            st.session_state.df = df.copy()
-            st.session_state.original_df = df.copy()
-            refresh_suggestions()
-            st.success(f"Loaded {len(df)} rows and {len(df.columns)} columns.")
+        file_id = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+        if file_id != st.session_state.loaded_file_id:
+            df = load_dataset_from_uploader(uploaded_file)
+            if df is not None:
+                st.session_state.df = df.copy()
+                st.session_state.original_df = df.copy()
+                st.session_state.loaded_file_id = file_id
+                st.session_state.undo_stack = []
+                st.session_state.transformation_history = []
+                st.session_state.dashboard_charts = []
+                st.session_state.dashboard_filters = []
+                st.session_state.generated_data_card = None
+                refresh_suggestions()
+                st.success(f"Loaded {len(df)} rows and {len(df.columns)} columns.")
 
     if st.session_state.df is not None:
         if st.sidebar.button("Reset to original"):
             st.session_state.df = st.session_state.original_df.copy()
+            st.session_state.undo_stack = []
+            st.session_state.transformation_history = []
+            st.session_state.dashboard_charts = []
+            st.session_state.generated_data_card = None
             refresh_suggestions()
             st.sidebar.success("Reset to original dataset.")
+        if st.sidebar.button(
+            "Undo last change", disabled=not st.session_state.undo_stack
+        ):
+            if undo_last_change():
+                st.sidebar.success("Last transformation was undone.")
 
     st.sidebar.markdown("---")
 
@@ -126,13 +191,11 @@ def sidebar_cleaning_tools():
 
     with st.sidebar.expander("Quick Cleaning"):
         if st.button("Remove missing rows"):
-            st.session_state.df = remove_missing(df)
-            refresh_suggestions()
+            commit_dataframe(remove_missing(df), "Remove rows containing missing values")
             st.success("Removed rows with missing values.")
 
         if st.button("Remove duplicate rows"):
-            st.session_state.df = remove_duplicates(df)
-            refresh_suggestions()
+            commit_dataframe(remove_duplicates(df), "Remove duplicate rows")
             st.success("Removed duplicate rows.")
 
     with st.sidebar.expander("Missing Value Handling"):
@@ -144,13 +207,13 @@ def sidebar_cleaning_tools():
 
         selected_cols = st.multiselect("Columns", cols, default=cols)
         if st.button("Apply fill"):
-            st.session_state.df = fill_missing(
+            updated = fill_missing(
                 st.session_state.df,
                 columns=selected_cols,
                 method=fill_method.lower(),
                 custom_value=custom_value,
             )
-            refresh_suggestions()
+            commit_dataframe(updated, f"Fill missing values using {fill_method.lower()}")
             st.success("Filled missing values.")
 
     with st.sidebar.expander("Value replacement"):
@@ -165,8 +228,9 @@ def sidebar_cleaning_tools():
                 if ":" in line:
                     k, v = line.split(":", 1)
                     mapping[k.strip()] = v.strip()
-            st.session_state.df = replace_values(st.session_state.df, mapping)
-            refresh_suggestions()
+            commit_dataframe(
+                replace_values(st.session_state.df, mapping), "Apply value replacements"
+            )
             st.success("Applied value replacements.")
 
     with st.sidebar.expander("String Cleaning"):
@@ -176,14 +240,14 @@ def sidebar_cleaning_tools():
             remove_special = st.checkbox("Remove special characters", value=True)
             case = st.selectbox("Case", ["none", "lower", "upper", "title"], index=0)
             if st.button("Clean strings"):
-                st.session_state.df = clean_string_column(
+                updated = clean_string_column(
                     st.session_state.df,
                     str_col,
                     trim=trim,
                     remove_special=remove_special,
                     case=case if case != "none" else None,
                 )
-                refresh_suggestions()
+                commit_dataframe(updated, f"Clean strings in {str_col}")
                 st.success(f"Cleaned strings in '{str_col}'.")
 
     with st.sidebar.expander("Numeric Transformations"):
@@ -193,23 +257,23 @@ def sidebar_cleaning_tools():
             transform = st.selectbox("Transformation", ["Log", "Normalize (0-1)", "Standardize (z)"])
             if st.button("Apply transformation"):
                 if transform == "Log":
-                    st.session_state.df = log_transform(st.session_state.df, num_col)
+                    updated = log_transform(st.session_state.df, num_col)
                 elif transform == "Normalize (0-1)":
-                    st.session_state.df = normalize_column(st.session_state.df, num_col, method="minmax")
+                    updated = normalize_column(st.session_state.df, num_col, method="minmax")
                 else:
-                    st.session_state.df = normalize_column(st.session_state.df, num_col, method="zscore")
-                refresh_suggestions()
+                    updated = normalize_column(st.session_state.df, num_col, method="zscore")
+                commit_dataframe(updated, f"{transform}: {num_col}")
                 st.success(f"Applied {transform} to {num_col}.")
 
     with st.sidebar.expander("Date Parsing"):
         date_col = st.selectbox("Date column", [None] + cols, key="date_col")
         date_format = st.text_input("Format (optional)", value="")
         if date_col and st.button("Parse dates"):
-            st.session_state.df = parse_dates(
+            updated = parse_dates(
                 st.session_state.df, date_col, format=date_format or None
             )
-            st.session_state.df = extract_date_parts(st.session_state.df, date_col)
-            refresh_suggestions()
+            updated = extract_date_parts(updated, date_col)
+            commit_dataframe(updated, f"Parse date and extract parts: {date_col}")
             st.success(f"Parsed dates in '{date_col}'.")
 
     with st.sidebar.expander("Type Conversion"):
@@ -219,10 +283,10 @@ def sidebar_cleaning_tools():
                 "Type", ["int", "float", "str", "datetime", "category"], key="convert_type"
             )
             if st.button("Convert type"):
-                st.session_state.df = convert_column_type(
+                updated = convert_column_type(
                     st.session_state.df, col_type, target_type
                 )
-                refresh_suggestions()
+                commit_dataframe(updated, f"Convert {col_type} to {target_type}")
                 st.success(f"Converted {col_type} to {target_type}.")
 
     with st.sidebar.expander("Filters"):
@@ -295,19 +359,18 @@ def ai_suggestions_tab():
         with st.expander(f"Suggestion {idx + 1}: {suggestion.get('suggestion')}"):
             st.write(suggestion.get("suggestion"))
             if st.button(f"Apply suggestion {idx + 1}"):
-                st.session_state.df = apply_suggestion(
+                updated = apply_suggestion(
                     st.session_state.df, suggestion
                 )
-                refresh_suggestions()
+                commit_dataframe(updated, suggestion.get("suggestion", "Smart suggestion"))
                 st.success("Suggestion applied."
                             "Review data preview to see changes.")
 
     if st.button("Apply all suggestions"):
+        updated = st.session_state.df
         for suggestion in suggestions:
-            st.session_state.df = apply_suggestion(
-                st.session_state.df, suggestion
-            )
-        refresh_suggestions()
+            updated = apply_suggestion(updated, suggestion)
+        commit_dataframe(updated, f"Apply {len(suggestions)} smart suggestions")
         st.success("All suggestions applied.")
 
 
@@ -326,8 +389,20 @@ def data_cleaning_tab():
 
     if st.button("Reset dataset to original"):
         st.session_state.df = st.session_state.original_df.copy()
+        st.session_state.undo_stack = []
+        st.session_state.transformation_history = []
+        st.session_state.dashboard_charts = []
+        st.session_state.generated_data_card = None
         refresh_suggestions()
         st.success("Dataset reset to original.")
+
+    if st.session_state.transformation_history:
+        st.subheader("Transformation History")
+        st.dataframe(
+            pd.DataFrame(st.session_state.transformation_history),
+            width="stretch",
+            hide_index=True,
+        )
 
 
 def profiling_tab():
@@ -401,17 +476,16 @@ def visualization_tab():
             st.error(f"Could not create chart: {e}")
 
     if st.session_state.last_plot is not None:
-        if st.button("Download chart as PNG"):
-            try:
-                img_bytes = plot_to_image_bytes(st.session_state.last_plot)
-                st.download_button(
-                    "Download PNG",
-                    data=img_bytes,
-                    file_name="chart.png",
-                    mime="image/png",
-                )
-            except Exception as e:
-                st.error(f"Export error: {e}")
+        try:
+            img_bytes = plot_to_image_bytes(st.session_state.last_plot)
+            st.download_button(
+                "Download chart as PNG",
+                data=img_bytes,
+                file_name="chart.png",
+                mime="image/png",
+            )
+        except Exception as e:
+            st.error(f"Export error: {e}")
 
 
 def dashboard_tab():
@@ -435,16 +509,22 @@ def dashboard_tab():
     color = st.sidebar.selectbox("Color", [None] + cols, key="dash_color")
 
     if st.sidebar.button("Add chart"):
-        fig = create_dashboard_chart(df, chart_type, x, y, color, title=f"{chart_type}: {y or x}")
+        filtered = apply_filters(df, st.session_state.dashboard_filters)
+        fig = create_dashboard_chart(
+            filtered, chart_type, x, y, color, title=f"{chart_type}: {y or x}"
+        )
         if fig is not None:
             st.session_state.dashboard_charts.append(
-                {"type": chart_type, "x": x, "y": y, "color": color, "figure": fig}
+                {"type": chart_type, "x": x, "y": y, "color": color}
             )
 
     if st.session_state.dashboard_filters:
         st.write("### Active Filters")
         for f in st.session_state.dashboard_filters:
             st.write(f"- {f}")
+        if st.button("Clear dashboard filters"):
+            st.session_state.dashboard_filters = []
+            st.rerun()
 
     filtered = apply_filters(df, st.session_state.dashboard_filters)
 
@@ -454,10 +534,19 @@ def dashboard_tab():
     else:
         for idx, entry in enumerate(st.session_state.dashboard_charts, start=1):
             st.subheader(f"Chart {idx}: {entry.get('type')}")
-            st.plotly_chart(entry.get("figure"), width="stretch")
+            figure = create_dashboard_chart(
+                filtered,
+                entry.get("type"),
+                entry.get("x"),
+                entry.get("y"),
+                entry.get("color"),
+                title=f"{entry.get('type')}: {entry.get('y') or entry.get('x')}",
+            )
+            if figure is not None:
+                st.plotly_chart(figure, width="stretch")
             if st.button(f"Remove chart {idx}"):
                 st.session_state.dashboard_charts.pop(idx - 1)
-                st.experimental_rerun()
+                st.rerun()
 
 
 def statistics_tab():
@@ -493,9 +582,9 @@ def statistics_tab():
         st.info("Need at least 2 numeric columns for regression.")
 
     st.subheader("Hypothesis testing")
-    cols = df.columns.tolist()
-    tcol1 = st.selectbox("Sample 1 column", [None] + cols, key="t1")
-    tcol2 = st.selectbox("Sample 2 column", [None] + cols, key="t2")
+    numeric_test_cols = df.select_dtypes(include=["number"]).columns.tolist()
+    tcol1 = st.selectbox("Sample 1 column", [None] + numeric_test_cols, key="t1")
+    tcol2 = st.selectbox("Sample 2 column", [None] + numeric_test_cols, key="t2")
     if tcol1 and tcol2:
         alpha = st.number_input(
             "Significance level (alpha)", min_value=0.001, max_value=0.2, value=0.05, step=0.01
@@ -536,7 +625,7 @@ def report_generator_tab():
     report_md = generate_markdown_report(df, overview, stats, suggestions, charts)
 
     st.subheader("Preview")
-    st.markdown(markdown_to_html(report_md), unsafe_allow_html=True)
+    st.markdown(report_md)
 
     st.subheader("Download")
     st.download_button(
@@ -550,7 +639,7 @@ def report_generator_tab():
         mime="text/html",
     )
 
-    if st.button("Download PDF"):
+    try:
         pdf_bytes = generate_pdf_report(report_md, charts)
         st.download_button(
             "Download PDF",
@@ -558,16 +647,108 @@ def report_generator_tab():
             file_name="report.pdf",
             mime="application/pdf",
         )
+    except Exception as exc:
+        st.warning(f"PDF generation is unavailable: {exc}")
+
+
+def ml_readiness_tab():
+    st.header("ML Readiness")
+    if st.session_state.df is None:
+        st.info("Upload a dataset to assess ML readiness.")
+        return
+
+    df = st.session_state.df
+    target = st.selectbox("Optional target column", [None] + df.columns.tolist())
+    report = analyze_ml_readiness(df, target)
+    st.metric("ML-readiness score", f"{report['score']}/100")
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Issues")
+        if report["issues"]:
+            for issue in report["issues"]:
+                st.warning(issue)
+        else:
+            st.success("No major automated readiness issues detected.")
+    with right:
+        st.subheader("Recommendations")
+        for recommendation in report["recommendations"]:
+            st.info(recommendation)
+
+    st.subheader("Data Dictionary")
+    st.dataframe(build_data_dictionary(df), width="stretch", hide_index=True)
 
 
 def export_tab():
-    st.header("Export")
+    st.header("AI Export Studio")
 
     if st.session_state.df is None:
         st.info("Upload and clean a dataset before exporting.")
         return
 
-    st.subheader("Export Cleaned Dataset")
+    df = st.session_state.df
+    st.subheader("1. Generate professional dataset documentation")
+    dataset_title = st.text_input("Dataset title", value="Smart Dataset")
+    provider_label = st.selectbox(
+        "Writing engine",
+        [
+            "Automatic (local AI → configured cloud AI → professional fallback)",
+            "Local Ollama / Qwen",
+            "Gemini",
+            "Groq",
+            "Built-in professional writer",
+        ],
+    )
+    provider_map = {
+        "Automatic (local AI → configured cloud AI → professional fallback)": "auto",
+        "Local Ollama / Qwen": "ollama",
+        "Gemini": "gemini",
+        "Groq": "groq",
+        "Built-in professional writer": "template",
+    }
+    quality = analyze_ml_readiness(df)
+
+    if st.button("Generate export documentation", type="primary"):
+        with st.spinner("Writing the dataset documentation..."):
+            card, used_provider, warning = generate_data_card(
+                df, quality, dataset_title, provider_map[provider_label]
+            )
+        st.session_state.generated_data_card = card
+        st.session_state.data_card_provider = used_provider
+        if warning:
+            st.warning(
+                "An AI provider was unavailable, so the reliable fallback was used. "
+                f"Details: {warning}"
+            )
+        st.success(f"Documentation generated with {used_provider}.")
+
+    if st.session_state.generated_data_card:
+        st.caption(f"Writer: {st.session_state.data_card_provider}")
+        st.markdown(st.session_state.generated_data_card)
+        st.download_button(
+            "Download data card",
+            data=st.session_state.generated_data_card,
+            file_name="README.md",
+            mime="text/markdown",
+        )
+
+        package = build_export_package(
+            df,
+            st.session_state.generated_data_card,
+            build_data_dictionary(df),
+            st.session_state.transformation_history,
+            quality,
+            st.session_state.original_df,
+        )
+        st.download_button(
+            "Download complete publishing package",
+            data=package,
+            file_name="smart_dataset_export.zip",
+            mime="application/zip",
+            type="primary",
+        )
+
+    st.subheader("2. Individual data exports")
     csv_bytes = dataframe_to_csv(st.session_state.df)
     st.download_button(
         "Download CSV",
@@ -575,8 +756,20 @@ def export_tab():
         file_name="cleaned_dataset.csv",
         mime="text/csv",
     )
+    st.download_button(
+        "Download Excel",
+        data=dataframe_to_excel(df),
+        file_name="cleaned_dataset.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    st.download_button(
+        "Download JSON",
+        data=dataframe_to_json(df),
+        file_name="cleaned_dataset.json",
+        mime="application/json",
+    )
 
-    st.subheader("Export Statistics")
+    st.subheader("3. Statistics")
     stats_csv = statistics_to_csv(descriptive_statistics(st.session_state.df))
     st.download_button(
         "Download stats CSV",
@@ -611,8 +804,9 @@ def main():
             "Visualization",
             "Interactive Dashboard",
             "Statistics",
+            "ML Readiness",
             "Report Generator",
-            "Export",
+            "AI Export Studio",
         ]
     )
 
@@ -631,8 +825,10 @@ def main():
     with tabs[6]:
         statistics_tab()
     with tabs[7]:
-        report_generator_tab()
+        ml_readiness_tab()
     with tabs[8]:
+        report_generator_tab()
+    with tabs[9]:
         export_tab()
 
     st.markdown("---")
