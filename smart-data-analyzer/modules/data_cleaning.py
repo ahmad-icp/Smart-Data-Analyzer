@@ -72,7 +72,7 @@ def convert_column_type(df: pd.DataFrame, column: str, target_type: str) -> pd.D
     elif target_type == "float":
         result[column] = pd.to_numeric(result[column], errors="coerce")
     elif target_type == "str":
-        result[column] = result[column].astype(str)
+        result[column] = result[column].astype("string")
     elif target_type == "datetime":
         result[column] = pd.to_datetime(result[column], errors="coerce")
     elif target_type == "category":
@@ -165,7 +165,10 @@ def log_transform(df: pd.DataFrame, column: str, new_column: Optional[str] = Non
 
     new_column = new_column or f"{column}_log"
     series = pd.to_numeric(result[column], errors="coerce")
-    result[new_column] = np.where(series >= -1, np.log1p(series), np.nan)
+    transformed = pd.Series(np.nan, index=series.index, dtype=float)
+    valid = series >= -1
+    transformed.loc[valid] = np.log1p(series.loc[valid])
+    result[new_column] = transformed
     return result
 
 

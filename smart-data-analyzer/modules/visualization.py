@@ -6,7 +6,12 @@ import plotly.graph_objects as go
 def suggest_chart_types(df: pd.DataFrame) -> list:
     """Suggest chart types based on data types in the dataframe."""
     num_cols = df.select_dtypes(include=["number"]).columns.tolist()
-    cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+    cat_cols = [
+        column
+        for column in df.columns
+        if pd.api.types.is_string_dtype(df[column])
+        or isinstance(df[column].dtype, pd.CategoricalDtype)
+    ]
     suggestions = []
     if num_cols:
         suggestions.append("Histogram")

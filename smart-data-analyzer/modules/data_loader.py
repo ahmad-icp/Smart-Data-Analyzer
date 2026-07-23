@@ -22,8 +22,10 @@ def load_dataset_bytes(file_bytes: bytes, filename: str) -> pd.DataFrame:
             return pd.read_csv(buffer, sep=None, engine="python")
         if lower.endswith((".tsv", ".tab")):
             return pd.read_csv(buffer, sep="\t")
-        if lower.endswith(".xlsx") or lower.endswith(".xls"):
-            return pd.read_excel(buffer)
+        if lower.endswith(".xlsx"):
+            return pd.read_excel(buffer, engine="openpyxl")
+        if lower.endswith(".xls"):
+            return pd.read_excel(buffer, engine="xlrd")
         if lower.endswith((".json", ".jsonl", ".ndjson")):
             try:
                 return pd.read_json(buffer, lines=lower.endswith((".jsonl", ".ndjson")))

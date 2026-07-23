@@ -1,5 +1,6 @@
 import io
 import json
+import warnings
 import zipfile
 from typing import Any, Dict, List, Optional
 
@@ -99,12 +100,15 @@ def build_export_package(
 
 
 def plot_to_image_bytes(fig, width: int = 800, height: int = 600) -> bytes:
-    """Render a Plotly figure to PNG bytes. Requires plotly[kaleido]."""
+    """Render a Plotly figure to PNG bytes using the bundled Kaleido renderer."""
     try:
         import plotly.io as pio
 
-        return pio.to_image(fig, format="png", width=width, height=height)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return pio.to_image(fig, format="png", width=width, height=height)
     except Exception as e:
         raise RuntimeError(
-            "Failed to render plot to image. Ensure plotly[kaleido] is installed." + str(e)
+            "Failed to render the chart. Reinstall the dependencies from "
+            f"requirements.txt. Details: {e}"
         )
