@@ -1,4 +1,8 @@
 import io
+import json
+import zipfile
+from typing import Any, Dict, List
+
 import pandas as pd
 
 
@@ -10,6 +14,71 @@ def dataframe_to_csv(df: pd.DataFrame) -> bytes:
 def statistics_to_csv(stats_df: pd.DataFrame) -> bytes:
     """Convert a statistics DataFrame to CSV bytes for download."""
     return stats_df.to_csv(index=True).encode("utf-8")
+
+
+def dataframe_to_excel(df: pd.DataFrame) -> bytes:
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Cleaned Data")
+    return buffer.getvalue()
+
+
+def dataframe_to_json(df: pd.DataFrame) -> bytes:
+    return df.to_json(orient="records", indent=2, date_format="iso").encode("utf-8")
+
+
+def dataframe_to_parquet(df: pd.DataFrame) -> bytes:
+    buffer = io.BytesIO()
+    df.to_parquet(buffer, index=False)
+    return buffer.getvalue()
+
+
+def build_export_package(
+    df: pd.DataFrame,
+    readme: str,
+    data_dictionary: pd.DataFrame,
+    history: List[Dict[str, Any]],
+    quality_report: Dict[str, Any],
+    original_df: pd.DataFrame = None,
+) -> bytes:
+    """Create a self-documenting, reproducible dataset export ZIP."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("README.md", readme)
+        archive.writestr("data/cleaned_dataset.csv", dataframe_to_csv(df))
+        archive.writestr("data/cleaned_dataset.json", dataframe_to_json(df))
+        if original_df is not None:
+            archive.writestr("data/original_dataset.csv", dataframe_to_csv(original_df))
+        archive.writestr(
+            "documentation/data_dictionary.csv",
+            data_dictionary.to_csv(index=False).encode("utf-8"),
+        )
+        archive.writestr(
+            "documentation/quality_report.json",
+            json.dumps(quality_report, indent=2, default=str),
+        )
+        archive.writestr(
+            "documentation/transformation_history.json",
+            json.dumps(history, indent=2, default=str),
+        )
+        archive.writestr(
+            "reproduce.py",
+            (
+                '"""Load the exported cleaned dataset."""\n'
+                "import pandas as pd\n\n"
+                'df = pd.read_csv("data/cleaned_dataset.csv")\n'
+                'print(f"Loaded {len(df)} rows and {len(df.columns)} columns")\n'
+            ),
+        )
+        try:
+            archive.writestr("data/cleaned_dataset.xlsx", dataframe_to_excel(df))
+        except Exception:
+            pass
+        try:
+            archive.writestr("data/cleaned_dataset.parquet", dataframe_to_parquet(df))
+        except Exception:
+            pass
+    return buffer.getvalue()
 
 
 def plot_to_image_bytes(fig, width: int = 800, height: int = 600) -> bytes:
